@@ -5,8 +5,11 @@ const { getStore } = require('@netlify/blobs');
 // BLOBS_SITE_ID a BLOBS_TOKEN (návod v README).
 function storeOptions(name) {
   const opts = { name, consistency: 'strong' };
-  if (process.env.BLOBS_SITE_ID && process.env.BLOBS_TOKEN) {
-    opts.siteID = process.env.BLOBS_SITE_ID;
+  // SITE_ID vkládá Netlify do funkcí samo, takže při ručním propojení
+  // většinou stačí nastavit jen BLOBS_TOKEN.
+  const siteID = process.env.BLOBS_SITE_ID || process.env.SITE_ID;
+  if (siteID && process.env.BLOBS_TOKEN) {
+    opts.siteID = siteID;
     opts.token = process.env.BLOBS_TOKEN;
   }
   return opts;
@@ -15,7 +18,11 @@ function storeOptions(name) {
 function describeStoreError(err) {
   const msg = (err && err.message) || 'neznámá chyba';
   if (/not been configured to use Netlify Blobs/i.test(msg)) {
-    return 'Úložiště zatím není propojené. V Netlify přidej proměnné BLOBS_SITE_ID a BLOBS_TOKEN a nasaď znovu (návod je v README).';
+    return 'Úložiště zatím není propojené. Otevři /.netlify/functions/diag, ' +
+      'tam je vidět proč, a doplň v Netlify proměnnou BLOBS_TOKEN (návod je v README).';
+  }
+  if (/401|403|unauthorized|forbidden/i.test(msg)) {
+    return 'Úložiště odmítlo přístup — BLOBS_TOKEN je nejspíš neplatný nebo patří k jinému účtu. Zkontroluj ho na /.netlify/functions/diag.';
   }
   return 'Úložiště neodpovědělo: ' + msg;
 }

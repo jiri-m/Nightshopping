@@ -30,20 +30,33 @@ nebuilduje. Rozbal zip a přetáhni **rozbalenou složku** do Netlify →
 Add new project → Deploy manually. V tomhle případě je navíc nutné propojit
 úložiště ručně, viz další sekce.
 
-## Propojení úložiště (jen u nasazení přetažením)
+## Propojení úložiště
 
-**Při nasazení z Gitu tuhle sekci přeskoč.** Týká se jen ručně nahraného
-zipu, kterému Netlify přístup k úložišti nedá automaticky — appka pak hlásí
-„Úložiště zatím není propojené".
+Většinou se propojí samo. Když appka hlásí **„Úložiště zatím není
+propojené"**, otevři si nejdřív diagnostiku:
 
-1. **Site ID**: v Netlify → Project configuration → General → zkopíruj *Project ID*
-2. **Token**: vpravo nahoře avatar → User settings → Applications →
-   Personal access tokens → *New access token* → zkopíruj ho (ukáže se jen jednou)
-3. V Netlify → Project configuration → **Environment variables** → Add a variable,
-   přidej dvě:
-   - `BLOBS_SITE_ID` = Project ID z kroku 1
-   - `BLOBS_TOKEN` = token z kroku 2
-4. Deploys → Trigger deploy → **Clear cache and deploy site**
+```
+https://TVUJ-WEB.netlify.app/.netlify/functions/diag
+```
+
+Klíčový je řádek `automatickyKontextBlobs`:
+
+- **`true`** → úložiště je propojené a chyba je jinde, koukni na `uloziste.chyba`
+- **`false`** → Netlify přístup nedalo, doplň token podle kroků níž
+
+### Doplnění tokenu ručně
+
+1. **Token**: v Netlify vpravo nahoře avatar → User settings → Applications →
+   Personal access tokens → *New access token* → zkopíruj ho
+   (ukáže se jen jednou)
+2. Netlify → Project configuration → **Environment variables** →
+   Add a variable → `BLOBS_TOKEN` = token z kroku 1
+3. Deploys → Trigger deploy → **Clear cache and deploy site**
+
+Site ID doplňovat nemusíš, Netlify ho funkcím dává samo — v diagnostice ho
+vidíš na řádku `siteId`. Když by tam přesto bylo `null`, přidej ještě
+proměnnou `BLOBS_SITE_ID` s hodnotou *Project ID*
+(Project configuration → General).
 
 
 
@@ -64,8 +77,9 @@ Když telefon polohu nedá, použije se město vybrané nahoře.
 - **Bílá stránka / Page not found** → publikovala se špatná složka.
   V Netlify: Project configuration → Build & deploy → Publish directory
   musí být prázdné nebo `.`
-- **„Úložiště zatím není propojené"** → chybí proměnné, viz sekce nahoře
-- **Cokoliv jiného** → Netlify → Logs → Functions, tam je přesná hláška
+- **„Úložiště zatím není propojené"** → viz sekce Propojení úložiště nahoře
+- **Cokoliv jiného** → `/.netlify/functions/diag`, případně
+  Netlify → Logs → Functions, tam je přesná hláška
 
 ## Přidání jmen a obchodů
 
