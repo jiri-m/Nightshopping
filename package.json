@@ -1,0 +1,9 @@
+{
+  "name": "obchody-checkin",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Kdo byl v obchode po 21:00 - checkin appka",
+  "dependencies": {
+    "@netlify/blobs": "^8.2.0"
+  }
+}

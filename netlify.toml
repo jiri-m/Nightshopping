@@ -1,0 +1,5 @@
+# Statické soubory leží v kořeni, funkce v netlify/functions.
+[build]
+  command = "npm install"
+  publish = "."
+  functions = "netlify/functions"

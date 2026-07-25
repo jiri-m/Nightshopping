@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Noční nákupy — kdo byl kde</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="wrap">
+
+  <header>
+    <h1>Noční nákupy</h1>
+    <p class="subtitle">Kdo byl v obchodě mezi 21:00 a zavíračkou</p>
+  </header>
+
+  <div id="banner" class="banner" hidden></div>
+
+  <section class="card who-am-i">
+    <div class="field">
+      <label for="person-select">Jsi</label>
+      <select id="person-select"></select>
+    </div>
+    <div class="field">
+      <label for="place-select">Kde</label>
+      <select id="place-select"></select>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Dnešní check-in <span id="today-date"></span></h2>
+    <div id="shop-grid" class="shop-grid"></div>
+  </section>
+
+  <section class="card">
+    <h2>Obchody poblíž</h2>
+    <div class="nearby-controls">
+      <button id="find-btn" class="primary-btn" type="button">Najít obchody poblíž</button>
+      <select id="radius-select" aria-label="Okruh hledání">
+        <option value="600">600 m</option>
+        <option value="1200" selected>1,2 km</option>
+        <option value="3000">3 km</option>
+      </select>
+    </div>
+    <p id="nearby-status" class="legend"></p>
+    <div id="nearby-list" class="nearby-list"></div>
+  </section>
+
+  <section class="card map-card">
+    <h2>Hvězdná mapa</h2>
+    <div class="stats" id="stats"></div>
+    <div class="map-holder">
+      <svg id="cz-map" viewBox="0 0 1000 566" preserveAspectRatio="xMidYMid meet" role="img"
+           aria-label="Mapa České republiky s návštěvami obchodů">
+        <defs>
+          <radialGradient id="glow">
+            <stop offset="0%" stop-color="#ffe9a8" stop-opacity="0.9"/>
+            <stop offset="100%" stop-color="#ffe9a8" stop-opacity="0"/>
+          </radialGradient>
+        </defs>
+        <path id="cz-outline" d="M1000.0 350.9 L996.3 351.3 L987.8 354.8 L976.9 356.1 L965.0 355.4 L955.9 361.5 L947.2 371.5 L938.2 378.5 L933.4 384.7 L930.7 391.0 L900.4 409.2 L896.2 416.7 L892.9 427.0 L891.5 440.9 L889.3 453.3 L884.1 459.9 L867.8 465.6 L863.7 468.6 L860.7 474.9 L851.5 484.7 L840.8 494.0 L821.0 504.7 L799.8 507.9 L772.3 504.4 L756.2 500.3 L748.4 504.8 L737.6 518.7 L726.1 542.6 L721.3 560.5 L717.6 555.4 L711.0 536.4 L703.5 534.0 L693.3 532.2 L685.6 529.4 L669.1 518.4 L660.6 515.1 L650.8 514.3 L641.5 520.7 L634.4 528.3 L612.5 528.2 L588.4 524.7 L554.0 499.5 L545.1 499.2 L535.6 500.4 L520.5 494.4 L491.4 478.1 L477.7 474.3 L469.1 476.6 L461.2 480.2 L455.6 480.7 L452.4 475.4 L441.5 468.8 L430.7 468.1 L427.5 472.0 L423.8 507.9 L420.1 520.9 L405.2 520.2 L399.9 526.4 L388.1 543.7 L385.8 560.4 L365.5 557.2 L355.8 554.4 L347.2 556.5 L337.8 565.7 L311.5 565.2 L290.6 559.7 L281.7 539.0 L272.1 530.8 L260.1 523.5 L255.8 521.9 L249.2 510.6 L236.6 496.6 L216.2 477.6 L200.4 478.5 L194.5 473.5 L191.9 466.4 L185.3 454.3 L177.8 445.9 L168.8 442.6 L155.8 431.9 L138.5 408.5 L122.6 392.4 L107.3 392.6 L97.6 384.2 L87.7 373.1 L80.4 362.3 L69.1 336.2 L60.9 321.3 L54.5 312.1 L47.2 304.4 L44.6 298.3 L53.5 284.4 L56.7 277.5 L60.5 272.3 L62.7 266.7 L62.6 262.4 L54.6 248.7 L43.7 238.8 L27.7 228.8 L17.5 216.1 L13.8 204.5 L12.6 198.1 L5.6 189.5 L0.0 176.8 L0.0 169.2 L1.4 167.0 L6.7 167.0 L12.6 172.2 L21.0 182.2 L27.8 196.8 L32.0 191.2 L39.9 175.7 L53.8 158.1 L68.1 148.1 L80.9 147.2 L91.5 144.5 L100.2 139.5 L115.5 141.5 L126.5 145.1 L130.1 142.8 L134.6 133.7 L137.4 125.8 L161.9 121.2 L170.3 106.0 L175.0 106.0 L180.4 103.8 L185.6 98.0 L190.6 95.6 L194.5 98.5 L199.7 100.4 L205.1 96.7 L213.1 79.3 L217.6 76.6 L239.0 73.8 L268.3 63.5 L283.1 54.4 L297.6 49.4 L313.2 40.6 L338.1 32.0 L339.2 28.4 L327.7 19.6 L323.9 14.0 L321.3 8.3 L325.3 1.9 L330.7 0.0 L337.8 2.6 L358.6 6.4 L364.3 10.1 L366.3 19.0 L371.6 27.4 L375.8 28.3 L374.3 41.9 L380.9 47.2 L390.6 51.3 L397.0 50.4 L401.6 44.9 L403.4 41.1 L416.2 40.5 L429.1 34.8 L430.1 25.4 L429.3 7.9 L430.7 5.4 L450.3 10.3 L470.0 18.2 L472.7 35.6 L478.0 44.1 L484.2 51.9 L490.2 55.5 L500.4 56.1 L527.1 66.4 L540.0 68.5 L553.1 75.6 L564.2 82.9 L572.3 84.5 L576.1 92.5 L581.0 97.9 L589.8 93.7 L621.8 87.8 L633.3 95.7 L641.1 104.0 L642.2 106.7 L638.1 114.0 L636.2 119.7 L632.8 123.5 L621.8 127.5 L615.6 134.0 L611.1 141.1 L614.2 147.9 L623.1 153.0 L629.5 154.2 L631.9 159.2 L652.3 181.4 L668.4 210.5 L674.7 215.0 L680.7 216.1 L687.5 211.8 L695.4 202.4 L704.8 195.6 L712.7 192.1 L726.7 184.1 L727.3 178.8 L715.6 159.2 L708.8 143.2 L710.5 140.4 L725.4 142.9 L750.8 151.6 L789.8 179.9 L796.8 179.9 L810.5 177.8 L825.4 173.2 L832.4 167.9 L835.1 169.9 L837.3 185.5 L833.5 194.0 L815.7 202.3 L816.7 206.4 L821.3 211.7 L829.3 215.3 L839.0 225.4 L845.7 237.0 L851.5 242.3 L858.0 244.9 L874.2 238.7 L878.7 233.8 L880.8 230.4 L883.9 231.2 L889.6 236.8 L891.3 240.2 L907.0 246.6 L916.1 254.5 L921.8 258.2 L928.2 254.6 L953.1 260.9 L960.0 266.2 L962.2 275.0 L960.9 280.3 L964.8 294.2 L996.2 327.3 L999.6 344.2 L1000.0 350.9 Z"/>
+        <g id="stars"></g>
+      </svg>
+      <p class="legend">
+        Jasnější hvězda = víc návštěv na jednom místě.
+        <span id="nogeo"></span>
+      </p>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Žebříček</h2>
+    <ol id="leaderboard" class="leaderboard"></ol>
+  </section>
+
+  <section class="card">
+    <h2>Historie</h2>
+    <div id="history" class="history"></div>
+  </section>
+
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
