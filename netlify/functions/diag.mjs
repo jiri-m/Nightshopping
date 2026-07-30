@@ -3,7 +3,11 @@
 // k Blobs, nebo jestli je potřeba doplnit BLOBS_TOKEN.
 //
 // Záměrně nevypisuje hodnoty tokenů, jen jestli existují a jak jsou dlouhé.
-const { getStore } = require('@netlify/blobs');
+import { getStore } from '@netlify/blobs';
+import { createRequire } from 'node:module';
+import { storeOptions } from './lib/blobs.mjs';
+
+const require = createRequire(import.meta.url);
 
 function present(name) {
   const v = process.env[name];
@@ -11,13 +15,8 @@ function present(name) {
   return { delka: v.length };
 }
 
-exports.handler = async () => {
-  const headers = {
-    'Content-Type': 'application/json; charset=utf-8',
-    'Cache-Control': 'no-store'
-  };
-
-  let blobsVerze = null;
+export default async () => {
+  let blobsVerze;
   try {
     blobsVerze = require('@netlify/blobs/package.json').version;
   } catch (e) {
@@ -27,8 +26,8 @@ exports.handler = async () => {
   const report = {
     node: process.version,
     blobsVerze,
-    // Tohle vkládá Netlify samo u deploye z Gitu. Když chybí, jde
-    // nejspíš o ručně nahraný zip.
+    formatFunkci: 'v2 (export default)',
+    // Tohle vkládá Netlify samo. Když chybí, úložiště se nepropojí.
     automatickyKontextBlobs: Boolean(process.env.NETLIFY_BLOBS_CONTEXT),
     // Site ID není tajné — když ho tu vidíš, můžeš ho rovnou použít
     // jako BLOBS_SITE_ID.
@@ -47,23 +46,13 @@ exports.handler = async () => {
       .sort()
   };
 
-  // Vlastní zkouška čtení — přesně to, co appce padá. Pořadí musí sedět
-  // s tím v checkins.js, jinak by diagnostika ukazovala něco jiného,
-  // než co dělá appka.
-  const opts = { name: 'checkins', consistency: 'strong' };
-  let cesta;
-  if (process.env.NETLIFY_BLOBS_CONTEXT) {
-    cesta = 'automaticky z Netlify';
-  } else {
-    const siteID = process.env.BLOBS_SITE_ID || process.env.SITE_ID;
-    if (siteID && process.env.BLOBS_TOKEN) {
-      opts.siteID = siteID;
-      opts.token = process.env.BLOBS_TOKEN;
-      cesta = 'rucne pres BLOBS_TOKEN';
-    } else {
-      cesta = 'zadne pripojeni k dispozici';
-    }
-  }
+  // Vlastní zkouška čtení, přes stejné nastavení jako appka.
+  const opts = storeOptions('checkins');
+  const cesta = process.env.NETLIFY_BLOBS_CONTEXT
+    ? 'automaticky z Netlify'
+    : opts.token
+      ? 'rucne pres BLOBS_TOKEN'
+      : 'zadne pripojeni k dispozici';
 
   try {
     const s = getStore(opts);
@@ -84,5 +73,10 @@ exports.handler = async () => {
     }
   }
 
-  return { statusCode: 200, headers, body: JSON.stringify(report, null, 2) };
+  return new Response(JSON.stringify(report, null, 2), {
+    headers: {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Cache-Control': 'no-store'
+    }
+  });
 };

@@ -44,6 +44,10 @@ Klíčový je řádek `automatickyKontextBlobs`:
 - **`true`** → úložiště je propojené a chyba je jinde, koukni na `uloziste.chyba`
 - **`false`** → Netlify přístup nedalo, doplň token podle kroků níž
 
+Pozor na jednu past: zneplatnit token v nastavení účtu **nesmaže** proměnnou
+`BLOBS_TOKEN`. Ta pak drží mrtvý token a úložiště vrací 401. Když je web
+napojený na Git, proměnnou rovnou smaž — propojení proběhne samo.
+
 ### Doplnění tokenu ručně
 
 1. **Token**: v Netlify vpravo nahoře avatar → User settings → Applications →

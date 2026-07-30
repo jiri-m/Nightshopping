@@ -2,4 +2,9 @@
 [build]
   command = "npm install"
   publish = "."
-  functions = "netlify/functions"
+
+# Samostatná sekce, ne zastaralý klíč build.functions — přes ni projdou
+# funkce moderním balíčkovačem, který jim předá i přístup k Blobs.
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
