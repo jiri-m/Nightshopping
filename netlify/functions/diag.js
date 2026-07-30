@@ -42,25 +42,41 @@ exports.handler = async () => {
     }
   };
 
-  // Vlastní zkouška zápisu i čtení. Tohle je to, co appce padá.
-  try {
-    const opts = { name: 'checkins', consistency: 'strong' };
+  // Vlastní zkouška čtení — přesně to, co appce padá. Pořadí musí sedět
+  // s tím v checkins.js, jinak by diagnostika ukazovala něco jiného,
+  // než co dělá appka.
+  const opts = { name: 'checkins', consistency: 'strong' };
+  let cesta;
+  if (process.env.NETLIFY_BLOBS_CONTEXT) {
+    cesta = 'automaticky z Netlify';
+  } else {
     const siteID = process.env.BLOBS_SITE_ID || process.env.SITE_ID;
     if (siteID && process.env.BLOBS_TOKEN) {
       opts.siteID = siteID;
       opts.token = process.env.BLOBS_TOKEN;
+      cesta = 'rucne pres BLOBS_TOKEN';
+    } else {
+      cesta = 'zadne pripojeni k dispozici';
     }
+  }
+
+  try {
     const s = getStore(opts);
     const data = await s.get('data.json', { type: 'json' });
     report.uloziste = {
       funguje: true,
+      pripojeno: cesta,
       zaznamu: Array.isArray(data) ? data.length : 0
     };
   } catch (err) {
-    report.uloziste = {
-      funguje: false,
-      chyba: (err && err.message) || String(err)
-    };
+    const chyba = (err && err.message) || String(err);
+    report.uloziste = { funguje: false, pripojeno: cesta, chyba };
+    if (/401|403|unauthorized|forbidden/i.test(chyba) && cesta.startsWith('rucne')) {
+      report.uloziste.rada =
+        'Token je neplatny, zneplatneny nebo patri k jinemu uctu. ' +
+        'Kdyz je web napojeny na Git, promennou BLOBS_TOKEN uplne smaz — ' +
+        'propojeni pak probehne samo.';
+    }
   }
 
   return { statusCode: 200, headers, body: JSON.stringify(report, null, 2) };

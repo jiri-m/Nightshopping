@@ -5,6 +5,8 @@ const { getStore } = require('@netlify/blobs');
 // BLOBS_SITE_ID a BLOBS_TOKEN (návod v README).
 function storeOptions(name) {
   const opts = { name, consistency: 'strong' };
+  // Automatické propojení má přednost, viz komentář v checkins.js.
+  if (process.env.NETLIFY_BLOBS_CONTEXT) return opts;
   // SITE_ID vkládá Netlify do funkcí samo, takže při ručním propojení
   // většinou stačí nastavit jen BLOBS_TOKEN.
   const siteID = process.env.BLOBS_SITE_ID || process.env.SITE_ID;

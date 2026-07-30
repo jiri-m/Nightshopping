@@ -8,6 +8,10 @@ const KEY = 'data.json';
 // BLOBS_SITE_ID a BLOBS_TOKEN (návod v README).
 function storeOptions(name) {
   const opts = { name, consistency: 'strong' };
+  // Automatické propojení má přednost. Kdyby se ruční token bral první,
+  // stačilo by ho zneplatnit a appka by přestala fungovat i na webu, kde
+  // Netlify přístup dává samo.
+  if (process.env.NETLIFY_BLOBS_CONTEXT) return opts;
   // SITE_ID vkládá Netlify do funkcí samo, takže při ručním propojení
   // většinou stačí nastavit jen BLOBS_TOKEN.
   const siteID = process.env.BLOBS_SITE_ID || process.env.SITE_ID;
