@@ -101,10 +101,12 @@ je web veřejný, jde to jen s PINem:
 1. Netlify → Project configuration → Environment variables → přidej
    `ADMIN_PIN` s libovolnou hodnotou, kterou si vymyslíš
 2. Deploys → Trigger deploy → Clear cache and deploy site
-3. V appce klepni na odkaz a PIN zadej
+3. V appce klepni na odkaz, rozbalí se políčko na PIN
 
 Bez nastaveného `ADMIN_PIN` server mazání odmítne, takže nikdo cizí data
-smazat nemůže.
+smazat nemůže. Jestli to hlásí, že mazání není povolené, i když proměnnou
+máš přidanou, chybí nasazení — na `/.netlify/functions/diag` musí být
+`adminPinNastaveny: true`.
 
 ## Když appka hlásí chybu
 

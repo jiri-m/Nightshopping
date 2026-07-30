@@ -480,6 +480,21 @@ input[type="text"], select {
 
 .footer { text-align: center; padding-top: 4px; }
 
+.reset-panel {
+  max-width: 320px;
+  margin: 4px auto 0;
+  text-align: left;
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+}
+
+.reset-panel .legend { margin-top: 0; }
+.reset-panel .legend:last-child { margin: 8px 2px 0; }
+
+.danger-btn { border-color: var(--danger); color: #ffd7e1; }
+
 button:focus-visible,
 select:focus-visible,
 input:focus-visible,

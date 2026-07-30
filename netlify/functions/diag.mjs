@@ -39,6 +39,9 @@ export default async () => {
       BLOBS_SITE_ID: present('BLOBS_SITE_ID'),
       BLOBS_TOKEN: present('BLOBS_TOKEN')
     },
+    // Bez tohohle server odmítne mazání dat. Po přidání proměnné je
+    // potřeba nasadit znovu, jinak ji funkce neuvidí.
+    adminPinNastaveny: Boolean(process.env.ADMIN_PIN),
     // Jen názvy, žádné hodnoty — ať je vidět, co Netlify funkci reálně
     // dává, bez rizika, že se sem vysype token.
     videnePromenne: Object.keys(process.env)

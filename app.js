@@ -100,6 +100,10 @@ const nogeoEl = $("nogeo");
 const leaderboardEl = $("leaderboard");
 const historyEl = $("history");
 const resetBtn = $("reset-btn");
+const resetPanel = $("reset-panel");
+const resetPin = $("reset-pin");
+const resetConfirm = $("reset-confirm");
+const resetStatus = $("reset-status");
 
 const state = {
   person: null,
@@ -812,18 +816,35 @@ function renderAll() {
 
 // ---------- vymazání dat ----------
 
-async function resetAll() {
-  if (!confirm("Opravdu smazat všechny check-iny i fotky? Nejde to vrátit.")) return;
-  const pin = prompt("Zadej ADMIN_PIN (nastavuje se v Netlify):");
-  if (!pin) return;
+// Panel místo confirm/prompt: dialogy prohlížeče část mobilů potlačuje
+// a hlavně by se chyba objevila v proužku úplně nahoře, kam odsud není
+// vidět. Takhle je výsledek hned u tlačítka.
+function toggleResetPanel() {
+  resetPanel.hidden = !resetPanel.hidden;
+  resetStatus.textContent = "";
+  if (!resetPanel.hidden) resetPin.focus();
+}
 
+async function resetAll() {
+  const pin = resetPin.value.trim();
+  if (!pin) {
+    resetStatus.textContent = "Zadej PIN.";
+    return;
+  }
+
+  resetConfirm.disabled = true;
+  resetStatus.textContent = "Mažu…";
   try {
     state.data = await apiPost({ action: "reset", pin });
     clearError();
+    resetPin.value = "";
+    resetPanel.hidden = true;
     flash("Data smazána");
     renderAll();
   } catch (err) {
-    showError(err.message);
+    resetStatus.textContent = err.message;
+  } finally {
+    resetConfirm.disabled = false;
   }
 }
 
@@ -861,7 +882,14 @@ async function init() {
   radiusSelect.addEventListener("change", loadNearby);
   reloadBtn.addEventListener("click", loadNearby);
   fallbackToggle.addEventListener("click", () => showFallback(chainGrid.hidden));
-  resetBtn.addEventListener("click", resetAll);
+  resetBtn.addEventListener("click", toggleResetPanel);
+  resetConfirm.addEventListener("click", resetAll);
+  resetPin.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      resetAll();
+    }
+  });
 
   try {
     state.data = await fetchData();

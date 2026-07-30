@@ -72,11 +72,6 @@
     </div>
   </section>
 
-  <section class="card">
-    <h2>Dnes</h2>
-    <div id="today-list" class="today-list"></div>
-  </section>
-
   <section class="card map-card">
     <h2>Hvězdná mapa</h2>
     <div class="stats" id="stats"></div>
@@ -110,12 +105,26 @@
   </section>
 
   <section class="card">
+    <h2>Dnes</h2>
+    <div id="today-list" class="today-list"></div>
+  </section>
+
+  <section class="card">
     <h2>Historie</h2>
     <div id="history" class="history"></div>
   </section>
 
   <footer class="footer">
     <button id="reset-btn" class="link-btn danger" type="button">Vymazat všechna data</button>
+    <div id="reset-panel" class="reset-panel" hidden>
+      <p class="legend">Smaže všechny check-iny i fotky. Nejde to vrátit.</p>
+      <div class="row">
+        <input id="reset-pin" type="password" autocomplete="off" placeholder="ADMIN_PIN"
+               aria-label="ADMIN_PIN">
+        <button id="reset-confirm" class="ghost-btn danger-btn" type="button">Smazat</button>
+      </div>
+      <p id="reset-status" class="legend"></p>
+    </div>
   </footer>
 
 </div>
