@@ -1,20 +1,36 @@
 // ====== KONFIGURACE — uprav podle potřeby ======
 const NAMES = [
   "Luciana",
-  "Jiri M.",
+  "Jiří M.",
   "Lucka",
-  "Jiri",
+  "Jiří Ch.",
   "Vlastik",
-  "Pavlinka"
+  "Pavlinka",
+  "Monika",
+  "Amálka",
+  "Vojta M.",
+  "Vojta A."
 ];
 
 const AVATARS = {
   "Luciana": "🦊",
-  "Jiri M.": "🐻",
+  "Jiří M.": "🐻",
   "Lucka": "🐱",
-  "Jiri": "🦁",
+  "Jiří Ch.": "🦁",
   "Vlastik": "🐢",
-  "Pavlinka": "🐰"
+  "Pavlinka": "🐰",
+  "Monika": "🦉",
+  "Amálka": "🦔",
+  "Vojta M.": "🦝",
+  "Vojta A.": "🦌"
+};
+
+// Staré check-iny v úložišti nesou původní zápis jména. Tímhle se při
+// načtení převedou, aby se lidem neztratily body a nefigurovali v
+// žebříčku dvakrát.
+const RENAMED = {
+  "Jiri": "Jiří Ch.",
+  "Jiri M.": "Jiří M."
 };
 
 const SHOPS = [
@@ -67,6 +83,23 @@ const GEOCODE_URL = "https://nominatim.openstreetmap.org/search";
 // Projekce odpovídá SVG cestě v index.html (viewBox 1000 x 566).
 const PROJ = { lon0: 12.089746, lat1: 51.037793, k: 0.645364, s: 229.8134 };
 
+// Kanada má vlastní malou siluetu v pravém horním rohu. Konstanty sedí
+// s cestou v index.html — obojí vzniklo z týchž dat, takže se nesmí
+// měnit jedno bez druhého. Lambertovo konformní kuželové zobrazení.
+const CA_PROJ = {
+  n: 0.9007450595160101,
+  f: 1.766832833629432,
+  rho0: 0.7283515152922648,
+  lon0: -1.6755160819145565,
+  k: 213.0706592854843,
+  ox: 806.78534126225,
+  oy: 22.0,
+  minx: -0.3472460481845546,
+  maxy: 0.6021574459518233
+};
+
+const CA_BOUNDS = { latMin: 41, latMax: 84, lngMin: -142, lngMax: -52 };
+
 const NO_FUNCTIONS =
   "Serverová část není nasazená. Na Netlify zkontroluj, že se nahrála i složka netlify/functions.";
 
@@ -79,6 +112,9 @@ const stepPlace = $("step-place");
 const stepShop = $("step-shop");
 const personChips = $("person-chips");
 const personPick = $("person-pick");
+const matesWrap = $("mates-wrap");
+const matesChips = $("mates-chips");
+const canadaInset = $("canada-inset");
 const placePick = $("place-pick");
 const gpsBtn = $("gps-btn");
 const cityInput = $("city-input");
@@ -107,6 +143,9 @@ const resetStatus = $("reset-status");
 
 const state = {
   person: null,
+  // Kdo šel nakupovat s tebou. Každý dostane vlastní check-in, aby se mu
+  // počítal do žebříčku, ale všechny nesou stejné groupId.
+  mates: [],
   // { lat, lng, label, precise } — precise = z GPS, tedy i hvězda sedí přesně
   location: null,
   data: [],
@@ -158,6 +197,32 @@ function project(lat, lng) {
   };
 }
 
+function inCanada(lat, lng) {
+  return lat >= CA_BOUNDS.latMin && lat <= CA_BOUNDS.latMax &&
+    lng >= CA_BOUNDS.lngMin && lng <= CA_BOUNDS.lngMax;
+}
+
+function projectCanada(lat, lng) {
+  const p = Math.max(Math.min((lat * Math.PI) / 180, 1.5620697), -1.5620697);
+  const l = (lng * Math.PI) / 180;
+  const rho = CA_PROJ.f / Math.pow(Math.tan(Math.PI / 4 + p / 2), CA_PROJ.n);
+  const x = rho * Math.sin(CA_PROJ.n * (l - CA_PROJ.lon0));
+  const y = CA_PROJ.rho0 - rho * Math.cos(CA_PROJ.n * (l - CA_PROJ.lon0));
+  return {
+    x: CA_PROJ.ox + (x - CA_PROJ.minx) * CA_PROJ.k,
+    y: CA_PROJ.oy + (CA_PROJ.maxy - y) * CA_PROJ.k
+  };
+}
+
+// Vrátí souřadnice v SVG a k tomu mapu, do které bod patří — spojnice
+// souhvězdí se pak počítají pro každou mapu zvlášť, aby nevedla čára
+// přes půl světa.
+function placeOnMap(lat, lng) {
+  return inCanada(lat, lng)
+    ? { ...projectCanada(lat, lng), map: "ca" }
+    : { ...project(lat, lng), map: "cz" };
+}
+
 function distanceMeters(aLat, aLng, bLat, bLng) {
   const R = 6371000;
   const dLat = ((bLat - aLat) * Math.PI) / 180;
@@ -179,6 +244,11 @@ function setStep(el, stateName) {
 
 // ---------- komunikace se serverem ----------
 
+function normalize(data) {
+  return data.map((c) =>
+    RENAMED[c.person] ? { ...c, person: RENAMED[c.person] } : c);
+}
+
 async function apiPost(payload) {
   const res = await fetch(API_URL, {
     method: "POST",
@@ -190,7 +260,7 @@ async function apiPost(payload) {
   if (!res.ok || !Array.isArray(result.data)) {
     throw new Error(result.error || `Server vrátil chybu ${res.status}.`);
   }
-  return result.data;
+  return normalize(result.data);
 }
 
 async function fetchData() {
@@ -200,7 +270,7 @@ async function fetchData() {
   if (!res.ok || !Array.isArray(json)) {
     throw new Error((json && json.error) || `Server vrátil chybu ${res.status}.`);
   }
-  return json;
+  return normalize(json);
 }
 
 // ---------- krok 1: kdo jsi ----------
@@ -218,13 +288,51 @@ function renderPersonChips() {
   });
 }
 
-function selectPerson(name) {
+function renderMateChips() {
+  matesChips.innerHTML = "";
+  NAMES.filter((n) => n !== state.person).forEach((name) => {
+    const on = state.mates.includes(name);
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "chip chip-sm" + (on ? " on" : "");
+    btn.setAttribute("aria-pressed", String(on));
+    btn.innerHTML = `<span class="chip-avatar">${AVATARS[name] || "🐾"}</span>${name}`;
+    btn.addEventListener("click", () => {
+      state.mates = on
+        ? state.mates.filter((m) => m !== name)
+        : [...state.mates, name];
+      renderMateChips();
+      updatePersonPick();
+    });
+    matesChips.appendChild(btn);
+  });
+}
+
+function updatePersonPick() {
+  if (!state.person) {
+    personPick.textContent = "";
+    return;
+  }
+  const me = `${AVATARS[state.person] || "🐾"} ${state.person}`;
+  personPick.textContent = state.mates.length
+    ? `${me} + ${state.mates.length}`
+    : me;
+}
+
+// collapse=true jen při obnovení zapamatovaného jména po načtení stránky.
+// Když jméno vybíráš teď, krok musí zůstat otevřený, jinak by se hned
+// schoval i výběr parťáků a nešli by přidat.
+function selectPerson(name, collapse = false) {
   state.person = name;
+  // Parťák nemůže být zároveň ten, kdo zapisuje.
+  state.mates = state.mates.filter((m) => m !== name);
   localStorage.setItem("noc-nakupy-person", name);
-  personPick.textContent = `${AVATARS[name] || "🐾"} ${name}`;
-  setStep(stepPerson, "done");
+  matesWrap.hidden = false;
+  updatePersonPick();
+  setStep(stepPerson, collapse ? "done" : "active");
   if (!state.location) setStep(stepPlace, "active");
   renderPersonChips();
+  renderMateChips();
   renderTodayList();
 }
 
@@ -253,8 +361,8 @@ async function geocodeCity(query) {
   const local = PLACES.find(([n]) => n.toLowerCase() === query.toLowerCase());
   if (local) return { lat: local[1], lng: local[2], label: local[0], precise: false };
 
-  const url =
-    `${GEOCODE_URL}?format=jsonv2&limit=1&countrycodes=cz&q=${encodeURIComponent(query)}`;
+  // Bez omezení na zemi — někdo může logovat i z Kanady.
+  const url = `${GEOCODE_URL}?format=jsonv2&limit=1&q=${encodeURIComponent(query)}`;
   const res = await fetch(url, { headers: { "Accept-Language": "cs" } });
   if (!res.ok) throw new Error(`vyhledávání měst vrátilo ${res.status}`);
   const hits = await res.json();
@@ -270,6 +378,8 @@ async function geocodeCity(query) {
 
 function setLocation(loc) {
   state.location = loc;
+  // Jakmile se pokročí dál, výběr osoby i parťáků se sbalí.
+  setStep(stepPerson, "done");
   placePick.textContent = loc.precise ? `📍 ${loc.label}` : loc.label;
   placeStatus.textContent = "";
   setStep(stepPlace, "done");
@@ -449,7 +559,13 @@ async function checkIn({ shop, branch, lat, lng, place }) {
     showError("Nejdřív vyber, kdo jsi.");
     return;
   }
-  const payload = { person: state.person, shop, date: todayStr(), action: "add" };
+  const payload = {
+    person: state.person,
+    persons: [state.person, ...state.mates],
+    shop,
+    date: todayStr(),
+    action: "add"
+  };
   if (branch) payload.branch = branch;
   if (typeof lat === "number" && typeof lng === "number") {
     payload.lat = lat;
@@ -460,7 +576,9 @@ async function checkIn({ shop, branch, lat, lng, place }) {
   try {
     state.data = await apiPost(payload);
     clearError();
-    flash(`Zapsáno — ${branch || shop} ✓`);
+    flash(state.mates.length
+      ? `Zapsáno pro ${state.mates.length + 1} lidi — ${branch || shop} ✓`
+      : `Zapsáno — ${branch || shop} ✓`);
     renderAll();
   } catch (err) {
     showError(err.message);
@@ -522,39 +640,59 @@ async function attachPhoto(id, file) {
 
 function renderTodayList() {
   const date = todayStr();
-  const mine = state.data
+  const today = state.data
     .filter((c) => c.date === date)
     .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
+  // Společný nákup je několik záznamů se stejným groupId. V seznamu je
+  // to jedna položka, aby se dvojice neukazovala dvakrát.
+  const rows = [];
+  const seen = new Set();
+  today.forEach((c) => {
+    if (c.groupId) {
+      if (seen.has(c.groupId)) return;
+      seen.add(c.groupId);
+      rows.push({ lead: c, party: today.filter((o) => o.groupId === c.groupId) });
+    } else {
+      rows.push({ lead: c, party: [c] });
+    }
+  });
+
   todayListEl.innerHTML = "";
 
-  if (!mine.length) {
+  if (!rows.length) {
     todayListEl.innerHTML =
       '<div class="empty">Dnes zatím nikdo nikde. Zapiš první návštěvu nahoře.</div>';
     return;
   }
 
-  mine.forEach((c) => {
+  rows.forEach(({ lead, party }) => {
+    const c = lead;
     const row = document.createElement("div");
     row.className = "today-item";
+
+    const who = party
+      .map((p) => `${AVATARS[p.person] || "🐾"} ${p.person}`)
+      .join(" + ");
 
     const info = document.createElement("div");
     info.className = "today-info";
     info.innerHTML =
-      `<span class="today-who">${AVATARS[c.person] || "🐾"} ${c.person}</span>` +
+      `<span class="today-who">${who}</span>` +
       `<span class="today-where">${c.branch || c.shop}</span>`;
     row.appendChild(info);
 
     // Zpětvzetí a fotka jen u vlastních záznamů — cizí check-in nemá
-    // smysl mazat omylem.
-    if (c.person === state.person) {
+    // smysl mazat omylem. U společného nákupu stačí, že jsi v partě.
+    const own = party.find((p) => p.person === state.person);
+    if (own) {
       const actions = document.createElement("div");
       actions.className = "today-actions";
 
       const cameraLabel = document.createElement("label");
       cameraLabel.className = "icon-btn";
       cameraLabel.title = "Přidat fotku";
-      cameraLabel.textContent = c.hasPhoto ? "🖼️" : "📷";
+      cameraLabel.textContent = own.hasPhoto ? "🖼️" : "📷";
 
       const fileInput = document.createElement("input");
       fileInput.type = "file";
@@ -562,7 +700,7 @@ function renderTodayList() {
       fileInput.setAttribute("capture", "environment");
       fileInput.addEventListener("change", (e) => {
         const file = e.target.files[0];
-        if (file) attachPhoto(c.id, file);
+        if (file) attachPhoto(own.id, file);
         fileInput.value = "";
       });
       cameraLabel.appendChild(fileInput);
@@ -570,9 +708,9 @@ function renderTodayList() {
       const undoBtn = document.createElement("button");
       undoBtn.type = "button";
       undoBtn.className = "icon-btn";
-      undoBtn.title = "Vzít zpět";
+      undoBtn.title = party.length > 1 ? "Vzít zpět celé partě" : "Vzít zpět";
       undoBtn.textContent = "↺";
-      undoBtn.addEventListener("click", () => removeCheckin(c.id));
+      undoBtn.addEventListener("click", () => removeCheckin(own.id));
 
       actions.append(cameraLabel, undoBtn);
       row.appendChild(actions);
@@ -670,24 +808,33 @@ function renderMap() {
   });
 
   const points = [...groups.values()].map((g) => {
-    const { x, y } = project(g.lat, g.lng);
-    return { x, y, g };
+    const { x, y, map } = placeOnMap(g.lat, g.lng);
+    return { x, y, map, g };
   });
 
-  constellationEdges(points).forEach(({ a, b }) => {
-    const line = document.createElementNS(ns, "line");
-    line.setAttribute("x1", points[a].x.toFixed(1));
-    line.setAttribute("y1", points[a].y.toFixed(1));
-    line.setAttribute("x2", points[b].x.toFixed(1));
-    line.setAttribute("y2", points[b].y.toFixed(1));
-    line.setAttribute("class", "constellation");
-    linesEl.appendChild(line);
+  ["cz", "ca"].forEach((map) => {
+    const own = points.filter((p) => p.map === map);
+    constellationEdges(own).forEach(({ a, b }) => {
+      const line = document.createElementNS(ns, "line");
+      line.setAttribute("x1", own[a].x.toFixed(1));
+      line.setAttribute("y1", own[a].y.toFixed(1));
+      line.setAttribute("x2", own[b].x.toFixed(1));
+      line.setAttribute("y2", own[b].y.toFixed(1));
+      line.setAttribute("class", "constellation");
+      linesEl.appendChild(line);
+    });
   });
 
-  points.forEach(({ x, y, g }, i) => {
+  // Silueta Kanady zůstává vidět pořád, ať je poznat, že se dá logovat
+  // i odtamtud, ale rozsvítí se teprve když tam někdo něco má.
+  canadaInset.classList.toggle("has-stars", points.some((p) => p.map === "ca"));
+
+  points.forEach(({ x, y, map, g }, i) => {
     // Malé hvězdičky. Roste to logaritmicky, aby jedno oblíbené místo
-    // nepřerostlo celou mapu.
-    const outer = 4.5 + Math.min(6, Math.log2(g.count + 1) * 1.9);
+    // nepřerostlo celou mapu. Na malé kanadské siluetě se zmenší, jinak
+    // by ji hvězda přerostla.
+    const scale = map === "ca" ? 0.62 : 1;
+    const outer = (4.5 + Math.min(6, Math.log2(g.count + 1) * 1.9)) * scale;
 
     const halo = document.createElementNS(ns, "circle");
     halo.setAttribute("cx", x.toFixed(1));
@@ -859,7 +1006,7 @@ async function init() {
 
   const savedPerson = localStorage.getItem("noc-nakupy-person");
   if (savedPerson && NAMES.includes(savedPerson)) {
-    selectPerson(savedPerson);
+    selectPerson(savedPerson, true);
   }
   const savedPlace = localStorage.getItem("noc-nakupy-place");
   if (savedPlace) cityInput.value = savedPlace;

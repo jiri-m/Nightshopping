@@ -150,6 +150,17 @@ header h1 { font-size: 26px; margin: 0 0 4px; letter-spacing: -0.02em; }
 
 .chips-chain { margin-top: 10px; }
 
+.chip-sm { padding: 6px 11px; font-size: 13px; }
+.chip-sm .chip-avatar { font-size: 14px; }
+
+.sub-label {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 14px 0 8px;
+}
+
+.chips-mates { opacity: 0.92; }
+
 /* ---- tlačítka a vstupy ---- */
 
 .row { display: flex; gap: 8px; align-items: stretch; }
@@ -364,6 +375,27 @@ input[type="text"], select {
 }
 
 .dust { fill: #cdd6ff; }
+
+/* Kanada — malá silueta v rohu pro ty, co zrovna nejsou doma. */
+#canada-outline {
+  fill: #0a0d14;
+  stroke: #2c3444;
+  stroke-width: 1.4;
+  stroke-linejoin: round;
+}
+
+#canada-label {
+  fill: var(--muted);
+  font-size: 13px;
+  font-family: inherit;
+  text-anchor: middle;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+#canada-inset { opacity: 0.55; transition: opacity 0.3s ease; }
+#canada-inset.has-stars { opacity: 1; }
+#canada-inset.has-stars #canada-outline { stroke: #3d4a63; }
 
 .constellation {
   stroke: #ffe9a8;

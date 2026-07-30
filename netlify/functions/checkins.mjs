@@ -64,7 +64,7 @@ export default async (req) => {
         return json({ error: 'Neplatný formát požadavku.' }, 400);
       }
 
-      const { person, shop, date, action: requestedAction, dataUrl, lat, lng, place, branch, id, pin } = body || {};
+      const { person, persons, shop, date, action: requestedAction, dataUrl, lat, lng, place, branch, id, pin } = body || {};
 
       // Smazání všeho je nevratné a endpoint je veřejný, takže ho pouští
       // jen shoda s ADMIN_PIN nastaveným v Netlify. Bez něj nejde vůbec.
@@ -101,15 +101,26 @@ export default async (req) => {
         }
 
         if (requestedAction === 'remove') {
+          // U společného nákupu se ruší celá parta — jinak by zůstaly
+          // viset záznamy ostatních k návštěvě, která se nekonala.
           const entry = data[idx];
-          if (entry.hasPhoto && entry.id) {
-            try {
-              await photoStore().delete(entry.id);
-            } catch (e) {
-              // úklid fotky je best-effort
+          const doomed = entry.groupId
+            ? data.filter((c) => c.groupId === entry.groupId)
+            : [entry];
+          const ps = photoStore();
+          for (const c of doomed) {
+            if (c.hasPhoto && c.id) {
+              try {
+                await ps.delete(c.id);
+              } catch (e) {
+                // úklid fotky je best-effort
+              }
             }
           }
-          data.splice(idx, 1);
+          const gone = new Set(doomed.map((c) => c.id));
+          for (let i = data.length - 1; i >= 0; i--) {
+            if (gone.has(data[i].id)) data.splice(i, 1);
+          }
         } else {
           if (!dataUrl) {
             return json({ error: 'Fotka nedorazila. Zkus to znovu.' }, 400);
@@ -130,21 +141,33 @@ export default async (req) => {
       const action = requestedAction || 'add';
 
       if (action === 'add') {
-        const entry = {
-          id: crypto.randomUUID(),
-          person,
-          shop,
-          date,
-          timestamp: new Date().toISOString(),
-          hasPhoto: false
-        };
-        if (typeof lat === 'number' && typeof lng === 'number') {
-          entry.lat = lat;
-          entry.lng = lng;
-          if (place) entry.place = place;
-        }
-        if (branch) entry.branch = branch;
-        data.push(entry);
+        // Můžou jít nakupovat spolu. Každý dostane vlastní záznam, aby se
+        // mu počítal do žebříčku, ale sdílejí groupId, takže se dají vzít
+        // zpět najednou a v seznamu jsou jako jedna položka.
+        const party = Array.isArray(persons) && persons.length
+          ? [...new Set(persons.filter((p) => typeof p === 'string' && p))]
+          : [person];
+        const timestamp = new Date().toISOString();
+        const groupId = party.length > 1 ? crypto.randomUUID() : null;
+
+        party.forEach((who) => {
+          const entry = {
+            id: crypto.randomUUID(),
+            person: who,
+            shop,
+            date,
+            timestamp,
+            hasPhoto: false
+          };
+          if (groupId) entry.groupId = groupId;
+          if (typeof lat === 'number' && typeof lng === 'number') {
+            entry.lat = lat;
+            entry.lng = lng;
+            if (place) entry.place = place;
+          }
+          if (branch) entry.branch = branch;
+          data.push(entry);
+        });
       } else if (action === 'remove-last') {
         const idx = findMostRecentMatch(data, person, shop, date);
         if (idx >= 0) {

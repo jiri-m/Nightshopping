@@ -69,7 +69,10 @@ proměnnou `BLOBS_SITE_ID` s hodnotou *Project ID*
 Jedna karta, tři kroky, které se odemykají postupně:
 
 1. **Kdo jsi** — klepneš na svoje jméno. Appka si ho pamatuje, takže příště
-   je krok rovnou hotový.
+   je krok rovnou hotový. Pod jménem se dá vybrat, **s kým jsi šel** —
+   klidně víc lidí. Každý z party dostane vlastní check-in, takže se mu
+   počítá do žebříčku, ale v seznamu je to jedna položka a bere se zpět
+   najednou.
 2. **Kde jsi** — buď „Použít moji polohu" (přesné, hvězda na mapě sedí na
    obchodě), nebo napíšeš město. Nabízí se města ze seznamu `PLACES`,
    ale napsat jde cokoliv — zbytek se dohledá v OpenStreetMap.
@@ -89,7 +92,9 @@ Hotový krok se sbalí na jeden řádek a klepnutím na hlavičku se zase rozbal
   a **📷** (připojit fotku). Cizí záznamy měnit nejdou.
 - **Hvězdná mapa** — každé místo je hvězdička, větší a jasnější = víc
   návštěv. Spojnice tvoří souhvězdí. Bez polohy se check-in počítá dál,
-  jen nemá hvězdu.
+  jen nemá hvězdu. V pravém horním rohu je malá **silueta Kanady**;
+  check-in odtamtud se promítne do ní, ne mimo mapu. Každá mapa má
+  vlastní souhvězdí, čáry mezi kontinenty nevedou.
 - **Žebříček** počítá všechny check-iny za celou dobu.
 - **Historie** ukazuje všechny záznamy, nejnovější nahoře.
 
@@ -125,12 +130,22 @@ Předloha je `nightshopper-favicon.jpg`, z ní jsou odvozené `icon-16.png`,
 telefonu). Při výměně předlohy je potřeba vygenerovat i tyhle tři velikosti
 a lehce motiv oříznout, jinak se ve 16 px ztratí.
 
+## Mapa Kanady
+
+Silueta i projekce vznikly z Natural Earth dat. V `index.html` je hotová
+cesta `#canada-outline`, v `app.js` odpovídající konstanty `CA_PROJ`.
+**Obojí patří k sobě** — když se překreslí silueta, musí se přepočítat
+i konstanty, jinak budou hvězdy vedle. Co je Kanada, určuje `CA_BOUNDS`.
+
 ## Přidání jmen a obchodů
 
 Všechno je nahoře v `app.js`:
 
 - `NAMES` — kdo se účastní
 - `AVATARS` — zvířecí ikonka ke jménu
+- `RENAMED` — když někoho přejmenuješ, přidej sem `"staré": "nové"`.
+  Staré check-iny v úložišti nesou původní jméno a bez tohohle by se
+  v žebříčku objevil dvakrát.
 - `SHOPS` — řetězce do záložního seznamu
 - `PLACES` — města v našeptávači
 
