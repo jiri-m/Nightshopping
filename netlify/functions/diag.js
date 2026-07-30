@@ -39,7 +39,12 @@ exports.handler = async () => {
     rucneNastavene: {
       BLOBS_SITE_ID: present('BLOBS_SITE_ID'),
       BLOBS_TOKEN: present('BLOBS_TOKEN')
-    }
+    },
+    // Jen názvy, žádné hodnoty — ať je vidět, co Netlify funkci reálně
+    // dává, bez rizika, že se sem vysype token.
+    videnePromenne: Object.keys(process.env)
+      .filter((k) => /NETLIFY|BLOB|DEPLOY|SITE|CONTEXT|BRANCH|COMMIT|URL/i.test(k))
+      .sort()
   };
 
   // Vlastní zkouška čtení — přesně to, co appce padá. Pořadí musí sedět
