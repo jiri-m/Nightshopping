@@ -112,9 +112,6 @@ const stepPlace = $("step-place");
 const stepShop = $("step-shop");
 const personChips = $("person-chips");
 const personPick = $("person-pick");
-const matesWrap = $("mates-wrap");
-const matesChips = $("mates-chips");
-const canadaInset = $("canada-inset");
 const placePick = $("place-pick");
 const gpsBtn = $("gps-btn");
 const cityInput = $("city-input");
@@ -142,10 +139,12 @@ const resetConfirm = $("reset-confirm");
 const resetStatus = $("reset-status");
 
 const state = {
+  // Kdo byl nakupovat. Vybírá se v jednom seznamu, první zakliknutý jsi ty
+  // — jeho jméno si appka pamatuje a k jeho záznamu se připíná fotka.
+  // Každý z party dostane vlastní check-in kvůli žebříčku, ale všechny
+  // nesou stejné groupId.
+  party: [],
   person: null,
-  // Kdo šel nakupovat s tebou. Každý dostane vlastní check-in, aby se mu
-  // počítal do žebříčku, ale všechny nesou stejné groupId.
-  mates: [],
   // { lat, lng, label, precise } — precise = z GPS, tedy i hvězda sedí přesně
   location: null,
   data: [],
@@ -278,33 +277,17 @@ async function fetchData() {
 function renderPersonChips() {
   personChips.innerHTML = "";
   NAMES.forEach((name) => {
+    const idx = state.party.indexOf(name);
+    const on = idx >= 0;
     const btn = document.createElement("button");
     btn.type = "button";
-    btn.className = "chip" + (state.person === name ? " on" : "");
-    btn.setAttribute("aria-pressed", String(state.person === name));
-    btn.innerHTML = `<span class="chip-avatar">${AVATARS[name] || "🐾"}</span>${name}`;
-    btn.addEventListener("click", () => selectPerson(name));
-    personChips.appendChild(btn);
-  });
-}
-
-function renderMateChips() {
-  matesChips.innerHTML = "";
-  NAMES.filter((n) => n !== state.person).forEach((name) => {
-    const on = state.mates.includes(name);
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "chip chip-sm" + (on ? " on" : "");
+    btn.className = "chip" + (on ? " on" : "");
     btn.setAttribute("aria-pressed", String(on));
-    btn.innerHTML = `<span class="chip-avatar">${AVATARS[name] || "🐾"}</span>${name}`;
-    btn.addEventListener("click", () => {
-      state.mates = on
-        ? state.mates.filter((m) => m !== name)
-        : [...state.mates, name];
-      renderMateChips();
-      updatePersonPick();
-    });
-    matesChips.appendChild(btn);
+    btn.innerHTML =
+      `<span class="chip-avatar">${AVATARS[name] || "🐾"}</span>${name}` +
+      (idx === 0 ? '<span class="chip-me">ty</span>' : "");
+    btn.addEventListener("click", () => togglePerson(name));
+    personChips.appendChild(btn);
   });
 }
 
@@ -314,29 +297,39 @@ function updatePersonPick() {
     return;
   }
   const me = `${AVATARS[state.person] || "🐾"} ${state.person}`;
-  personPick.textContent = state.mates.length
-    ? `${me} + ${state.mates.length}`
-    : me;
+  personPick.textContent =
+    state.party.length > 1 ? `${me} + ${state.party.length - 1}` : me;
 }
 
-// collapse=true jen při obnovení zapamatovaného jména po načtení stránky.
-// Když jméno vybíráš teď, krok musí zůstat otevřený, jinak by se hned
-// schoval i výběr parťáků a nešli by přidat.
-function selectPerson(name, collapse = false) {
-  state.person = name;
-  // Parťák nemůže být zároveň ten, kdo zapisuje.
-  state.mates = state.mates.filter((m) => m !== name);
-  localStorage.setItem("noc-nakupy-person", name);
-  matesWrap.hidden = false;
+function syncPersonSteps(collapse) {
+  state.person = state.party[0] || null;
+  if (state.person) {
+    localStorage.setItem("noc-nakupy-person", state.person);
+  } else {
+    localStorage.removeItem("noc-nakupy-person");
+  }
+
   updatePersonPick();
-  setStep(stepPerson, collapse ? "done" : "active");
-  if (!state.location) setStep(stepPlace, "active");
+  setStep(stepPerson, collapse && state.person ? "done" : "active");
+  if (!state.person) {
+    // Bez jména nemá smysl pokračovat, další kroky se zase zamknou.
+    setStep(stepPlace, "locked");
+    setStep(stepShop, "locked");
+  } else if (!state.location) {
+    setStep(stepPlace, "active");
+  }
+
   renderPersonChips();
-  renderMateChips();
   renderTodayList();
 }
 
-// ---------- krok 2: kde jsi ----------
+// Druhé klepnutí jméno odznačí. První zaklikaný je ten, kdo zapisuje.
+function togglePerson(name) {
+  const idx = state.party.indexOf(name);
+  if (idx >= 0) state.party.splice(idx, 1);
+  else state.party.push(name);
+  syncPersonSteps(false);
+}
 
 function fillCityList() {
   PLACES.forEach(([name]) => {
@@ -561,7 +554,7 @@ async function checkIn({ shop, branch, lat, lng, place }) {
   }
   const payload = {
     person: state.person,
-    persons: [state.person, ...state.mates],
+    persons: state.party,
     shop,
     date: todayStr(),
     action: "add"
@@ -576,8 +569,8 @@ async function checkIn({ shop, branch, lat, lng, place }) {
   try {
     state.data = await apiPost(payload);
     clearError();
-    flash(state.mates.length
-      ? `Zapsáno pro ${state.mates.length + 1} lidi — ${branch || shop} ✓`
+    flash(state.party.length > 1
+      ? `Zapsáno pro ${state.party.length} lidi — ${branch || shop} ✓`
       : `Zapsáno — ${branch || shop} ✓`);
     renderAll();
   } catch (err) {
@@ -825,9 +818,6 @@ function renderMap() {
     });
   });
 
-  // Silueta Kanady zůstává vidět pořád, ať je poznat, že se dá logovat
-  // i odtamtud, ale rozsvítí se teprve když tam někdo něco má.
-  canadaInset.classList.toggle("has-stars", points.some((p) => p.map === "ca"));
 
   points.forEach(({ x, y, map, g }, i) => {
     // Malé hvězdičky. Roste to logaritmicky, aby jedno oblíbené místo
@@ -1006,7 +996,8 @@ async function init() {
 
   const savedPerson = localStorage.getItem("noc-nakupy-person");
   if (savedPerson && NAMES.includes(savedPerson)) {
-    selectPerson(savedPerson, true);
+    state.party = [savedPerson];
+    syncPersonSteps(true);
   }
   const savedPlace = localStorage.getItem("noc-nakupy-place");
   if (savedPlace) cityInput.value = savedPlace;

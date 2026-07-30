@@ -68,11 +68,12 @@ proměnnou `BLOBS_SITE_ID` s hodnotou *Project ID*
 
 Jedna karta, tři kroky, které se odemykají postupně:
 
-1. **Kdo jsi** — klepneš na svoje jméno. Appka si ho pamatuje, takže příště
-   je krok rovnou hotový. Pod jménem se dá vybrat, **s kým jsi šel** —
-   klidně víc lidí. Každý z party dostane vlastní check-in, takže se mu
-   počítá do žebříčku, ale v seznamu je to jedna položka a bere se zpět
-   najednou.
+1. **Kdo jsi** — klepneš na svoje jméno. Když jste šli víc lidí, zaklikni
+   je v tomtéž seznamu, dalším klepnutím se jméno zase odznačí. První
+   zakliknutý je označený jako **ty** — jeho jméno si appka pamatuje a
+   k jeho záznamu se připíná fotka. Každý z party dostane vlastní
+   check-in, takže se mu počítá do žebříčku, ale v seznamu je to jedna
+   položka a bere se zpět najednou.
 2. **Kde jsi** — buď „Použít moji polohu" (přesné, hvězda na mapě sedí na
    obchodě), nebo napíšeš město. Nabízí se města ze seznamu `PLACES`,
    ale napsat jde cokoliv — zbytek se dohledá v OpenStreetMap.
@@ -92,7 +93,8 @@ Hotový krok se sbalí na jeden řádek a klepnutím na hlavičku se zase rozbal
   a **📷** (připojit fotku). Cizí záznamy měnit nejdou.
 - **Hvězdná mapa** — každé místo je hvězdička, větší a jasnější = víc
   návštěv. Spojnice tvoří souhvězdí. Bez polohy se check-in počítá dál,
-  jen nemá hvězdu. V pravém horním rohu je malá **silueta Kanady**;
+  jen nemá hvězdu. V pravém horním rohu je malá **silueta Kanady**
+  ve stejném stylu jako obrys Česka;
   check-in odtamtud se promítne do ní, ne mimo mapu. Každá mapa má
   vlastní souhvězdí, čáry mezi kontinenty nevedou.
 - **Žebříček** počítá všechny check-iny za celou dobu.

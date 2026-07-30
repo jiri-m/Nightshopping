@@ -150,16 +150,20 @@ header h1 { font-size: 26px; margin: 0 0 4px; letter-spacing: -0.02em; }
 
 .chips-chain { margin-top: 10px; }
 
-.chip-sm { padding: 6px 11px; font-size: 13px; }
-.chip-sm .chip-avatar { font-size: 14px; }
-
-.sub-label {
-  color: var(--muted);
-  font-size: 12px;
-  margin: 14px 0 8px;
+/* Označení toho, kdo zapisuje — jeho jméno si appka pamatuje. */
+.chip-me {
+  background: var(--accent-2);
+  color: #04231b;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 1px 6px;
+  margin-left: 2px;
 }
 
-.chips-mates { opacity: 0.92; }
+.hint { color: var(--muted); font-size: 12px; margin: 10px 2px 0; line-height: 1.5; }
 
 /* ---- tlačítka a vstupy ---- */
 
@@ -367,20 +371,14 @@ input[type="text"], select {
 
 #cz-map { display: block; width: 100%; height: auto; }
 
-#cz-outline {
+.dust { fill: #cdd6ff; }
+
+/* Kanada — malá silueta v rohu pro ty, co zrovna nejsou doma.
+   Sdílí styl s obrysem Česka, ať to na mapě drží pohromadě. */
+#cz-outline, #canada-outline {
   fill: #0a0d14;
   stroke: #2c3444;
   stroke-width: 2;
-  stroke-linejoin: round;
-}
-
-.dust { fill: #cdd6ff; }
-
-/* Kanada — malá silueta v rohu pro ty, co zrovna nejsou doma. */
-#canada-outline {
-  fill: #0a0d14;
-  stroke: #2c3444;
-  stroke-width: 1.4;
   stroke-linejoin: round;
 }
 
@@ -393,9 +391,7 @@ input[type="text"], select {
   text-transform: uppercase;
 }
 
-#canada-inset { opacity: 0.55; transition: opacity 0.3s ease; }
-#canada-inset.has-stars { opacity: 1; }
-#canada-inset.has-stars #canada-outline { stroke: #3d4a63; }
+
 
 .constellation {
   stroke: #ffe9a8;
