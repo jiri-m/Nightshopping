@@ -118,6 +118,13 @@ máš přidanou, chybí nasazení — na `/.netlify/functions/diag` musí být
 - **Cokoliv jiného** → `/.netlify/functions/diag`, případně
   Netlify → Logs → Functions, tam je přesná hláška
 
+## Ikona
+
+Předloha je `nightshopper-favicon.jpg`, z ní jsou odvozené `icon-16.png`,
+`icon-32.png` a `icon-180.png` (ta slouží jako ikona po přidání na plochu
+telefonu). Při výměně předlohy je potřeba vygenerovat i tyhle tři velikosti
+a lehce motiv oříznout, jinak se ve 16 px ztratí.
+
 ## Přidání jmen a obchodů
 
 Všechno je nahoře v `app.js`:
