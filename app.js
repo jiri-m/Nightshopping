@@ -28,7 +28,8 @@ const SHOPS = [
   "COOP"
 ];
 
-// Města pro mapu, když nechceš povolit GPS. Přidávej klidně další.
+// Nabídka měst do našeptávače. Napsat jde i cokoliv jiného, to se pak
+// dohledá v OpenStreetMap.
 const PLACES = [
   ["Praha", 50.075, 14.437],
   ["Brno", 49.195, 16.607],
@@ -60,6 +61,8 @@ const PLACES = [
 
 const API_URL = "/.netlify/functions/checkins";
 const PHOTO_URL = "/.netlify/functions/photo";
+const OVERPASS_URL = "https://overpass-api.de/api/interpreter";
+const GEOCODE_URL = "https://nominatim.openstreetmap.org/search";
 
 // Projekce odpovídá SVG cestě v index.html (viewBox 1000 x 566).
 const PROJ = { lon0: 12.089746, lat1: 51.037793, k: 0.645364, s: 229.8134 };
@@ -67,22 +70,46 @@ const PROJ = { lon0: 12.089746, lat1: 51.037793, k: 0.645364, s: 229.8134 };
 const NO_FUNCTIONS =
   "Serverová část není nasazená. Na Netlify zkontroluj, že se nahrála i složka netlify/functions.";
 
-const personSelect = document.getElementById("person-select");
-const placeSelect = document.getElementById("place-select");
-const shopGrid = document.getElementById("shop-grid");
-const leaderboardEl = document.getElementById("leaderboard");
-const historyEl = document.getElementById("history");
-const todayDateEl = document.getElementById("today-date");
-const starsEl = document.getElementById("stars");
-const statsEl = document.getElementById("stats");
-const nogeoEl = document.getElementById("nogeo");
-const bannerEl = document.getElementById("banner");
-const findBtn = document.getElementById("find-btn");
-const radiusSelect = document.getElementById("radius-select");
-const nearbyStatus = document.getElementById("nearby-status");
-const nearbyList = document.getElementById("nearby-list");
+const $ = (id) => document.getElementById(id);
 
-let allData = [];
+const bannerEl = $("banner");
+const todayDateEl = $("today-date");
+const stepPerson = $("step-person");
+const stepPlace = $("step-place");
+const stepShop = $("step-shop");
+const personChips = $("person-chips");
+const personPick = $("person-pick");
+const placePick = $("place-pick");
+const gpsBtn = $("gps-btn");
+const cityInput = $("city-input");
+const cityList = $("city-list");
+const cityBtn = $("city-btn");
+const placeStatus = $("place-status");
+const radiusSelect = $("radius-select");
+const reloadBtn = $("reload-btn");
+const nearbyStatus = $("nearby-status");
+const nearbyList = $("nearby-list");
+const fallbackToggle = $("fallback-toggle");
+const chainGrid = $("chain-grid");
+const todayListEl = $("today-list");
+const starsEl = $("stars");
+const linesEl = $("lines");
+const dustEl = $("dust");
+const statsEl = $("stats");
+const nogeoEl = $("nogeo");
+const leaderboardEl = $("leaderboard");
+const historyEl = $("history");
+const resetBtn = $("reset-btn");
+
+const state = {
+  person: null,
+  // { lat, lng, label, precise } — precise = z GPS, tedy i hvězda sedí přesně
+  location: null,
+  data: [],
+  loadingShops: false
+};
+
+// ---------- drobnosti ----------
 
 function showError(msg) {
   bannerEl.textContent = msg;
@@ -91,6 +118,19 @@ function showError(msg) {
 
 function clearError() {
   bannerEl.hidden = true;
+}
+
+function flash(msg) {
+  // Vždycky jen jedna bublina — jinak se při rychlém klikání překrývají.
+  const prev = document.querySelector(".flash");
+  if (prev) prev.remove();
+
+  const el = document.createElement("div");
+  el.className = "flash";
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.classList.add("out"), 1600);
+  setTimeout(() => el.remove(), 2200);
 }
 
 function todayStr() {
@@ -114,64 +154,23 @@ function project(lat, lng) {
   };
 }
 
-// ---------- výběr osoby a místa ----------
-
-function initSelects() {
-  NAMES.forEach((name) => {
-    const opt = document.createElement("option");
-    opt.value = name;
-    opt.textContent = `${AVATARS[name] || "🐾"} ${name}`;
-    personSelect.appendChild(opt);
-  });
-
-  const savedPerson = localStorage.getItem("noc-nakupy-person");
-  if (savedPerson && NAMES.includes(savedPerson)) personSelect.value = savedPerson;
-
-  personSelect.addEventListener("change", () => {
-    localStorage.setItem("noc-nakupy-person", personSelect.value);
-    renderShopGrid();
-  });
-
-  const gpsOpt = document.createElement("option");
-  gpsOpt.value = "__gps__";
-  gpsOpt.textContent = "📍 Podle polohy";
-  placeSelect.appendChild(gpsOpt);
-
-  PLACES.forEach(([name]) => {
-    const opt = document.createElement("option");
-    opt.value = name;
-    opt.textContent = name;
-    placeSelect.appendChild(opt);
-  });
-
-  const savedPlace = localStorage.getItem("noc-nakupy-place");
-  if (savedPlace) placeSelect.value = savedPlace;
-
-  placeSelect.addEventListener("change", () => {
-    localStorage.setItem("noc-nakupy-place", placeSelect.value);
-  });
+function distanceMeters(aLat, aLng, bLat, bLng) {
+  const R = 6371000;
+  const dLat = ((bLat - aLat) * Math.PI) / 180;
+  const dLng = ((bLng - aLng) * Math.PI) / 180;
+  const la1 = (aLat * Math.PI) / 180;
+  const la2 = (bLat * Math.PI) / 180;
+  const h =
+    Math.sin(dLat / 2) ** 2 + Math.cos(la1) * Math.cos(la2) * Math.sin(dLng / 2) ** 2;
+  return Math.round(2 * R * Math.asin(Math.sqrt(h)));
 }
 
-function getGpsPosition() {
-  return new Promise((resolve) => {
-    if (!navigator.geolocation) return resolve(null);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => resolve({
-        lat: pos.coords.latitude,
-        lng: pos.coords.longitude,
-        place: "podle polohy"
-      }),
-      () => resolve(null),
-      { timeout: 8000, maximumAge: 300000 }
-    );
-  });
+function formatDist(m) {
+  return m < 1000 ? `${m} m` : `${(m / 1000).toFixed(1)} km`.replace(".", ",");
 }
 
-async function currentLocation() {
-  const choice = placeSelect.value;
-  if (choice === "__gps__") return await getGpsPosition();
-  const found = PLACES.find(([name]) => name === choice);
-  return found ? { lat: found[1], lng: found[2], place: found[0] } : null;
+function setStep(el, stateName) {
+  el.dataset.state = stateName;
 }
 
 // ---------- komunikace se serverem ----------
@@ -200,17 +199,275 @@ async function fetchData() {
   return json;
 }
 
-async function sendCheckin(shop, action) {
-  const payload = { person: personSelect.value, shop, date: todayStr(), action };
+// ---------- krok 1: kdo jsi ----------
 
-  if (action === "add") {
-    const loc = await currentLocation();
-    if (loc) Object.assign(payload, loc);
+function renderPersonChips() {
+  personChips.innerHTML = "";
+  NAMES.forEach((name) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "chip" + (state.person === name ? " on" : "");
+    btn.setAttribute("aria-pressed", String(state.person === name));
+    btn.innerHTML = `<span class="chip-avatar">${AVATARS[name] || "🐾"}</span>${name}`;
+    btn.addEventListener("click", () => selectPerson(name));
+    personChips.appendChild(btn);
+  });
+}
+
+function selectPerson(name) {
+  state.person = name;
+  localStorage.setItem("noc-nakupy-person", name);
+  personPick.textContent = `${AVATARS[name] || "🐾"} ${name}`;
+  setStep(stepPerson, "done");
+  if (!state.location) setStep(stepPlace, "active");
+  renderPersonChips();
+  renderTodayList();
+}
+
+// ---------- krok 2: kde jsi ----------
+
+function fillCityList() {
+  PLACES.forEach(([name]) => {
+    const opt = document.createElement("option");
+    opt.value = name;
+    cityList.appendChild(opt);
+  });
+}
+
+function getGpsPosition() {
+  return new Promise((resolve) => {
+    if (!navigator.geolocation) return resolve(null);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      () => resolve(null),
+      { timeout: 8000, maximumAge: 300000 }
+    );
+  });
+}
+
+async function geocodeCity(query) {
+  const local = PLACES.find(([n]) => n.toLowerCase() === query.toLowerCase());
+  if (local) return { lat: local[1], lng: local[2], label: local[0], precise: false };
+
+  const url =
+    `${GEOCODE_URL}?format=jsonv2&limit=1&countrycodes=cz&q=${encodeURIComponent(query)}`;
+  const res = await fetch(url, { headers: { "Accept-Language": "cs" } });
+  if (!res.ok) throw new Error(`vyhledávání měst vrátilo ${res.status}`);
+  const hits = await res.json();
+  if (!hits.length) throw new Error("takové město jsem nenašel");
+  const hit = hits[0];
+  return {
+    lat: Number(hit.lat),
+    lng: Number(hit.lon),
+    label: hit.name || hit.display_name.split(",")[0],
+    precise: false
+  };
+}
+
+function setLocation(loc) {
+  state.location = loc;
+  placePick.textContent = loc.precise ? `📍 ${loc.label}` : loc.label;
+  placeStatus.textContent = "";
+  setStep(stepPlace, "done");
+  setStep(stepShop, "active");
+  loadNearby();
+}
+
+async function useGps() {
+  gpsBtn.disabled = true;
+  placeStatus.textContent = "Zjišťuji polohu…";
+  const pos = await getGpsPosition();
+  gpsBtn.disabled = false;
+
+  if (!pos) {
+    placeStatus.textContent =
+      "Polohu se nepodařilo zjistit. Povol ji v prohlížeči, nebo napiš město.";
+    return;
+  }
+  setLocation({ lat: pos.lat, lng: pos.lng, label: "moje poloha", precise: true });
+}
+
+async function useCity() {
+  const q = cityInput.value.trim();
+  if (!q) {
+    placeStatus.textContent = "Napiš název města.";
+    return;
+  }
+  cityBtn.disabled = true;
+  placeStatus.textContent = "Hledám město…";
+  try {
+    const loc = await geocodeCity(q);
+    localStorage.setItem("noc-nakupy-place", loc.label);
+    setLocation(loc);
+  } catch (err) {
+    placeStatus.textContent = `Nepovedlo se — ${err.message}.`;
+  } finally {
+    cityBtn.disabled = false;
+  }
+}
+
+// ---------- krok 3: kde jsi nakupoval ----------
+
+function chainOf(tags) {
+  const raw = tags.brand || tags.name || "";
+  const hit = SHOPS.find((c) => raw.toLowerCase().includes(c.split(" ")[0].toLowerCase()));
+  return hit || tags.brand || tags.name || "Jiný obchod";
+}
+
+async function loadNearby() {
+  if (!state.location || state.loadingShops) return;
+  state.loadingShops = true;
+  reloadBtn.disabled = true;
+  nearbyList.innerHTML = "";
+  nearbyStatus.textContent = "Hledám obchody v okolí…";
+
+  const { lat, lng } = state.location;
+  const radius = Number(radiusSelect.value);
+  const query =
+    `[out:json][timeout:25];` +
+    `nwr(around:${radius},${lat},${lng})` +
+    `[shop~"^(supermarket|convenience|department_store|greengrocer)$"];` +
+    `out center tags;`;
+
+  let elements;
+  try {
+    const res = await fetch(OVERPASS_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: "data=" + encodeURIComponent(query)
+    });
+    if (!res.ok) throw new Error(`databáze obchodů vrátila ${res.status}`);
+    elements = (await res.json()).elements || [];
+  } catch (err) {
+    nearbyStatus.textContent = `Obchody se nenačetly — ${err.message}.`;
+    showFallback(true);
+    state.loadingShops = false;
+    reloadBtn.disabled = false;
+    return;
+  }
+
+  const shops = elements
+    .map((el) => {
+      const sLat = el.lat != null ? el.lat : el.center && el.center.lat;
+      const sLng = el.lon != null ? el.lon : el.center && el.center.lon;
+      const tags = el.tags || {};
+      if (sLat == null || sLng == null || (!tags.name && !tags.brand)) return null;
+      return {
+        name: tags.name || tags.brand,
+        chain: chainOf(tags),
+        street: [tags["addr:street"], tags["addr:housenumber"]].filter(Boolean).join(" "),
+        hours: tags.opening_hours || "",
+        lat: sLat,
+        lng: sLng,
+        dist: distanceMeters(lat, lng, sLat, sLng)
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.dist - b.dist)
+    .slice(0, 25);
+
+  state.loadingShops = false;
+  reloadBtn.disabled = false;
+
+  if (!shops.length) {
+    nearbyStatus.textContent = "Tady žádný obchod není. Zkus větší okruh.";
+    showFallback(true);
+    return;
+  }
+
+  nearbyStatus.textContent = state.location.precise
+    ? "Klepni na obchod, ve kterém jsi byl."
+    : `Obchody kolem místa ${state.location.label}. Pro přesnější výsledky povol polohu.`;
+  showFallback(false);
+
+  shops.forEach((shop) => {
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "nearby-item";
+
+    const detail = [shop.street, formatDist(shop.dist)].filter(Boolean).join(" · ");
+    row.innerHTML =
+      `<span class="nearby-info">` +
+      `<span class="nearby-name">${shop.name}</span>` +
+      `<span class="nearby-detail">${detail}</span>` +
+      (shop.hours ? `<span class="nearby-hours">${shop.hours}</span>` : "") +
+      `</span><span class="nearby-go">+</span>`;
+
+    row.addEventListener("click", () => {
+      row.disabled = true;
+      checkIn({
+        shop: shop.chain,
+        branch: shop.street ? `${shop.name}, ${shop.street}` : shop.name,
+        lat: shop.lat,
+        lng: shop.lng,
+        place: shop.name
+      }).finally(() => {
+        row.disabled = false;
+      });
+    });
+
+    nearbyList.appendChild(row);
+  });
+}
+
+function showFallback(open) {
+  chainGrid.hidden = !open;
+  fallbackToggle.textContent = open ? "Skrýt seznam řetězců" : "Můj obchod tu není →";
+}
+
+function renderChainGrid() {
+  chainGrid.innerHTML = "";
+  SHOPS.forEach((shop) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "chip";
+    btn.textContent = shop;
+    btn.addEventListener("click", () => {
+      btn.disabled = true;
+      const loc = state.location;
+      checkIn({
+        shop,
+        lat: loc ? loc.lat : undefined,
+        lng: loc ? loc.lng : undefined,
+        place: loc ? loc.label : undefined
+      }).finally(() => {
+        btn.disabled = false;
+      });
+    });
+    chainGrid.appendChild(btn);
+  });
+}
+
+// ---------- zápis návštěvy ----------
+
+async function checkIn({ shop, branch, lat, lng, place }) {
+  if (!state.person) {
+    showError("Nejdřív vyber, kdo jsi.");
+    return;
+  }
+  const payload = { person: state.person, shop, date: todayStr(), action: "add" };
+  if (branch) payload.branch = branch;
+  if (typeof lat === "number" && typeof lng === "number") {
+    payload.lat = lat;
+    payload.lng = lng;
+    if (place) payload.place = place;
   }
 
   try {
-    allData = await apiPost(payload);
+    state.data = await apiPost(payload);
     clearError();
+    flash(`Zapsáno — ${branch || shop} ✓`);
+    renderAll();
+  } catch (err) {
+    showError(err.message);
+  }
+}
+
+async function removeCheckin(id) {
+  try {
+    state.data = await apiPost({ action: "remove", id });
+    clearError();
+    flash("Check-in vzat zpět");
     renderAll();
   } catch (err) {
     showError(err.message);
@@ -245,249 +502,161 @@ function compressImage(file, maxDim = 700, quality = 0.6) {
   });
 }
 
-async function attachPhoto(shop, file) {
+async function attachPhoto(id, file) {
   try {
     const dataUrl = await compressImage(file);
-    allData = await apiPost({
-      person: personSelect.value,
-      shop,
-      date: todayStr(),
-      action: "attach-photo",
-      dataUrl
-    });
+    state.data = await apiPost({ action: "attach-photo", id, dataUrl });
     clearError();
+    flash("Fotka připojena");
     renderAll();
   } catch (err) {
     showError(err.message);
   }
 }
 
-// ---------- vykreslení ----------
+// ---------- dnešek ----------
 
+function renderTodayList() {
+  const date = todayStr();
+  const mine = state.data
+    .filter((c) => c.date === date)
+    .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
-// ---------- konkrétní obchody poblíž (data z OpenStreetMap) ----------
+  todayListEl.innerHTML = "";
 
-const OVERPASS_URL = "https://overpass-api.de/api/interpreter";
-
-function distanceMeters(aLat, aLng, bLat, bLng) {
-  const R = 6371000;
-  const dLat = ((bLat - aLat) * Math.PI) / 180;
-  const dLng = ((bLng - aLng) * Math.PI) / 180;
-  const la1 = (aLat * Math.PI) / 180;
-  const la2 = (bLat * Math.PI) / 180;
-  const h =
-    Math.sin(dLat / 2) ** 2 + Math.cos(la1) * Math.cos(la2) * Math.sin(dLng / 2) ** 2;
-  return Math.round(2 * R * Math.asin(Math.sqrt(h)));
-}
-
-function chainOf(tags) {
-  const raw = tags.brand || tags.name || "";
-  const hit = SHOPS.find((c) => raw.toLowerCase().includes(c.split(" ")[0].toLowerCase()));
-  return hit || tags.brand || tags.name || "Jiný obchod";
-}
-
-async function findNearby() {
-  findBtn.disabled = true;
-  nearbyList.innerHTML = "";
-  nearbyStatus.textContent = "Zjišťuji polohu…";
-
-  let origin = await getGpsPosition();
-  let usedFallback = false;
-  if (!origin) {
-    origin = await currentLocation();
-    usedFallback = true;
-  }
-  if (!origin) {
-    nearbyStatus.textContent = "Polohu se nepodařilo zjistit. Vyber město nahoře a zkus to znovu.";
-    findBtn.disabled = false;
+  if (!mine.length) {
+    todayListEl.innerHTML =
+      '<div class="empty">Dnes zatím nikdo nikde. Zapiš první návštěvu nahoře.</div>';
     return;
   }
 
-  const radius = Number(radiusSelect.value);
-  nearbyStatus.textContent = "Hledám obchody…";
-
-  const query =
-    `[out:json][timeout:25];` +
-    `nwr(around:${radius},${origin.lat},${origin.lng})` +
-    `[shop~"^(supermarket|convenience|department_store|greengrocer)$"];` +
-    `out center tags;`;
-
-  let elements;
-  try {
-    const res = await fetch(OVERPASS_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: "data=" + encodeURIComponent(query)
-    });
-    if (!res.ok) throw new Error(`databáze obchodů vrátila ${res.status}`);
-    const json = await res.json();
-    elements = json.elements || [];
-  } catch (err) {
-    nearbyStatus.textContent = `Obchody se nenačetly — ${err.message}. Zkus to za chvíli.`;
-    findBtn.disabled = false;
-    return;
-  }
-
-  const shops = elements
-    .map((el) => {
-      const lat = el.lat != null ? el.lat : el.center && el.center.lat;
-      const lng = el.lon != null ? el.lon : el.center && el.center.lon;
-      const tags = el.tags || {};
-      if (lat == null || lng == null || (!tags.name && !tags.brand)) return null;
-      const street = [tags["addr:street"], tags["addr:housenumber"]].filter(Boolean).join(" ");
-      return {
-        name: tags.name || tags.brand,
-        chain: chainOf(tags),
-        street,
-        hours: tags.opening_hours || "",
-        lat,
-        lng,
-        dist: distanceMeters(origin.lat, origin.lng, lat, lng)
-      };
-    })
-    .filter(Boolean)
-    .sort((a, b) => a.dist - b.dist)
-    .slice(0, 25);
-
-  if (shops.length === 0) {
-    nearbyStatus.textContent = "Tady žádný obchod není. Zkus větší okruh.";
-    findBtn.disabled = false;
-    return;
-  }
-
-  nearbyStatus.textContent = usedFallback
-    ? `${shops.length} obchodů kolem města ${origin.place}. Pro přesnější výsledky povol polohu.`
-    : `${shops.length} obchodů v okolí. Klepni na + a zapiš návštěvu.`;
-
-  shops.forEach((shop) => {
+  mine.forEach((c) => {
     const row = document.createElement("div");
-    row.className = "nearby-item";
+    row.className = "today-item";
 
     const info = document.createElement("div");
-    info.className = "nearby-info";
-    const detail = [shop.street, `${shop.dist} m`].filter(Boolean).join(" · ");
+    info.className = "today-info";
     info.innerHTML =
-      `<span class="nearby-name">${shop.name}</span>` +
-      `<span class="nearby-detail">${detail}</span>` +
-      (shop.hours ? `<span class="nearby-hours">${shop.hours}</span>` : "");
+      `<span class="today-who">${AVATARS[c.person] || "🐾"} ${c.person}</span>` +
+      `<span class="today-where">${c.branch || c.shop}</span>`;
+    row.appendChild(info);
 
-    const addBtn = document.createElement("button");
-    addBtn.className = "step-btn";
-    addBtn.type = "button";
-    addBtn.textContent = "+";
-    addBtn.setAttribute("aria-label", `Zapsat návštěvu ${shop.name}`);
-    addBtn.addEventListener("click", async () => {
-      addBtn.disabled = true;
-      await checkInBranch(shop);
-      addBtn.textContent = "✓";
-      setTimeout(() => {
-        addBtn.textContent = "+";
-        addBtn.disabled = false;
-      }, 1200);
-    });
+    // Zpětvzetí a fotka jen u vlastních záznamů — cizí check-in nemá
+    // smysl mazat omylem.
+    if (c.person === state.person) {
+      const actions = document.createElement("div");
+      actions.className = "today-actions";
 
-    row.append(info, addBtn);
-    nearbyList.appendChild(row);
+      const cameraLabel = document.createElement("label");
+      cameraLabel.className = "icon-btn";
+      cameraLabel.title = "Přidat fotku";
+      cameraLabel.textContent = c.hasPhoto ? "🖼️" : "📷";
+
+      const fileInput = document.createElement("input");
+      fileInput.type = "file";
+      fileInput.accept = "image/*";
+      fileInput.setAttribute("capture", "environment");
+      fileInput.addEventListener("change", (e) => {
+        const file = e.target.files[0];
+        if (file) attachPhoto(c.id, file);
+        fileInput.value = "";
+      });
+      cameraLabel.appendChild(fileInput);
+
+      const undoBtn = document.createElement("button");
+      undoBtn.type = "button";
+      undoBtn.className = "icon-btn";
+      undoBtn.title = "Vzít zpět";
+      undoBtn.textContent = "↺";
+      undoBtn.addEventListener("click", () => removeCheckin(c.id));
+
+      actions.append(cameraLabel, undoBtn);
+      row.appendChild(actions);
+    }
+
+    todayListEl.appendChild(row);
   });
-
-  findBtn.disabled = false;
 }
 
-async function checkInBranch(shop) {
-  try {
-    allData = await apiPost({
-      person: personSelect.value,
-      shop: shop.chain,
-      branch: shop.street ? `${shop.name}, ${shop.street}` : shop.name,
-      date: todayStr(),
-      action: "add",
-      lat: shop.lat,
-      lng: shop.lng,
-      place: shop.name
-    });
-    clearError();
-    renderAll();
-  } catch (err) {
-    showError(err.message);
+// ---------- hvězdná mapa ----------
+
+const ns = "http://www.w3.org/2000/svg";
+
+// Deterministický generátor, aby prach na pozadí neposkakoval při
+// každém překreslení.
+function mulberry32(seed) {
+  return function () {
+    seed |= 0;
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function starPath(cx, cy, outer, inner, spikes = 4) {
+  const step = Math.PI / spikes;
+  let d = "";
+  for (let i = 0; i < spikes * 2; i++) {
+    const r = i % 2 === 0 ? outer : inner;
+    const a = -Math.PI / 2 + i * step;
+    d += (i === 0 ? "M" : "L") + (cx + Math.cos(a) * r).toFixed(2) +
+      " " + (cy + Math.sin(a) * r).toFixed(2);
   }
+  return d + "Z";
 }
 
-function renderShopGrid() {
-  const person = personSelect.value;
-  const date = todayStr();
-  shopGrid.innerHTML = "";
+// Minimální kostra — spojnice pak vypadají jako čáry v souhvězdí,
+// každá hvězda je připojená a nevzniká změť.
+function constellationEdges(points) {
+  if (points.length < 2) return [];
+  const inTree = [0];
+  const rest = points.map((_, i) => i).slice(1);
+  const edges = [];
 
-  SHOPS.forEach((shop) => {
-    const mine = allData.filter(
-      (c) => c.person === person && c.shop === shop && c.date === date
-    ).length;
-    const total = allData.filter((c) => c.shop === shop && c.date === date).length;
+  while (rest.length) {
+    let best = null;
+    for (const a of inTree) {
+      for (const b of rest) {
+        const d = Math.hypot(points[a].x - points[b].x, points[a].y - points[b].y);
+        if (!best || d < best.d) best = { a, b, d };
+      }
+    }
+    edges.push(best);
+    inTree.push(best.b);
+    rest.splice(rest.indexOf(best.b), 1);
+  }
+  return edges;
+}
 
-    const row = document.createElement("div");
-    row.className = "shop-btn" + (mine > 0 ? " checked" : "");
-
-    const label = document.createElement("span");
-    label.className = "shop-label";
-    label.innerHTML = `${shop}<br><span class="count">${total}× dnes celkem</span>`;
-
-    const stepper = document.createElement("span");
-    stepper.className = "stepper";
-
-    const minusBtn = document.createElement("button");
-    minusBtn.className = "step-btn";
-    minusBtn.type = "button";
-    minusBtn.textContent = "−";
-    minusBtn.setAttribute("aria-label", `Ubrat návštěvu ${shop}`);
-    minusBtn.disabled = mine === 0;
-    minusBtn.addEventListener("click", () => sendCheckin(shop, "remove-last"));
-
-    const countSpan = document.createElement("span");
-    countSpan.className = "my-count";
-    countSpan.textContent = mine;
-
-    const plusBtn = document.createElement("button");
-    plusBtn.className = "step-btn";
-    plusBtn.type = "button";
-    plusBtn.textContent = "+";
-    plusBtn.setAttribute("aria-label", `Přidat návštěvu ${shop}`);
-    plusBtn.addEventListener("click", () => sendCheckin(shop, "add"));
-
-    stepper.append(minusBtn, countSpan, plusBtn);
-
-    const cameraLabel = document.createElement("label");
-    cameraLabel.className = "camera-btn" + (mine === 0 ? " disabled" : "");
-    cameraLabel.title = "Přidat fotku k dnešnímu check-inu";
-    cameraLabel.textContent = "📷";
-
-    const fileInput = document.createElement("input");
-    fileInput.type = "file";
-    fileInput.accept = "image/*";
-    fileInput.setAttribute("capture", "environment");
-    fileInput.disabled = mine === 0;
-    fileInput.addEventListener("change", (e) => {
-      const file = e.target.files[0];
-      if (file) attachPhoto(shop, file);
-      fileInput.value = "";
-    });
-    cameraLabel.appendChild(fileInput);
-
-    row.append(label, stepper, cameraLabel);
-    shopGrid.appendChild(row);
-  });
+function renderDust() {
+  if (dustEl.childNodes.length) return;
+  const rand = mulberry32(20260730);
+  for (let i = 0; i < 140; i++) {
+    const dot = document.createElementNS(ns, "circle");
+    dot.setAttribute("cx", (rand() * 1000).toFixed(1));
+    dot.setAttribute("cy", (rand() * 566).toFixed(1));
+    dot.setAttribute("r", (0.4 + rand() * 1).toFixed(2));
+    dot.setAttribute("class", "dust");
+    dot.style.opacity = (0.08 + rand() * 0.32).toFixed(2);
+    dustEl.appendChild(dot);
+  }
 }
 
 function renderMap() {
   starsEl.innerHTML = "";
+  linesEl.innerHTML = "";
+  renderDust();
 
   const groups = new Map();
   let noGeo = 0;
 
-  allData.forEach((c) => {
+  state.data.forEach((c) => {
     if (typeof c.lat !== "number" || typeof c.lng !== "number") {
       noGeo += 1;
       return;
     }
-    const key = `${c.lat.toFixed(2)},${c.lng.toFixed(2)}`;
+    const key = `${c.lat.toFixed(3)},${c.lng.toFixed(3)}`;
     if (!groups.has(key)) {
       groups.set(key, { lat: c.lat, lng: c.lng, count: 0, place: c.place, shops: new Set() });
     }
@@ -496,27 +665,41 @@ function renderMap() {
     g.shops.add(c.shop);
   });
 
-  const ns = "http://www.w3.org/2000/svg";
-
-  groups.forEach((g) => {
+  const points = [...groups.values()].map((g) => {
     const { x, y } = project(g.lat, g.lng);
-    const r = 3 + Math.min(9, Math.log2(g.count + 1) * 2.6);
+    return { x, y, g };
+  });
+
+  constellationEdges(points).forEach(({ a, b }) => {
+    const line = document.createElementNS(ns, "line");
+    line.setAttribute("x1", points[a].x.toFixed(1));
+    line.setAttribute("y1", points[a].y.toFixed(1));
+    line.setAttribute("x2", points[b].x.toFixed(1));
+    line.setAttribute("y2", points[b].y.toFixed(1));
+    line.setAttribute("class", "constellation");
+    linesEl.appendChild(line);
+  });
+
+  points.forEach(({ x, y, g }, i) => {
+    // Malé hvězdičky. Roste to logaritmicky, aby jedno oblíbené místo
+    // nepřerostlo celou mapu.
+    const outer = 4.5 + Math.min(6, Math.log2(g.count + 1) * 1.9);
 
     const halo = document.createElementNS(ns, "circle");
-    halo.setAttribute("cx", x);
-    halo.setAttribute("cy", y);
-    halo.setAttribute("r", r * 3.2);
+    halo.setAttribute("cx", x.toFixed(1));
+    halo.setAttribute("cy", y.toFixed(1));
+    halo.setAttribute("r", (outer * 2.8).toFixed(1));
     halo.setAttribute("fill", "url(#glow)");
     starsEl.appendChild(halo);
 
-    const star = document.createElementNS(ns, "circle");
-    star.setAttribute("cx", x);
-    star.setAttribute("cy", y);
-    star.setAttribute("r", r);
+    const star = document.createElementNS(ns, "path");
+    star.setAttribute("d", starPath(x, y, outer, outer * 0.3));
     star.setAttribute("class", "star");
+    star.style.animationDelay = `${(i % 7) * 0.4}s`;
 
     const title = document.createElementNS(ns, "title");
-    title.textContent = `${g.place || "Bez názvu"} — ${g.count}× (${[...g.shops].join(", ")})`;
+    title.textContent =
+      `${g.place || "Bez názvu"} — ${g.count}× (${[...g.shops].join(", ")})`;
     star.appendChild(title);
 
     starsEl.appendChild(star);
@@ -524,29 +707,32 @@ function renderMap() {
 
   nogeoEl.textContent = noGeo > 0 ? ` ${noGeo} návštěv je bez místa.` : "";
 
-  const nights = new Set(allData.map((c) => c.date)).size;
+  const nights = new Set(state.data.map((c) => c.date)).size;
   const shopCounts = {};
-  allData.forEach((c) => {
+  state.data.forEach((c) => {
     shopCounts[c.shop] = (shopCounts[c.shop] || 0) + 1;
   });
   const topShop = Object.entries(shopCounts).sort((a, b) => b[1] - a[1])[0];
 
   const stats = [
-    ["Návštěv", allData.length],
+    ["Návštěv", state.data.length],
     ["Nocí", nights],
     ["Míst", groups.size],
     ["Nejčastěji", topShop ? topShop[0] : "—"]
   ];
 
   statsEl.innerHTML = stats
-    .map(([k, v]) => `<div class="stat"><span class="stat-value">${v}</span><span class="stat-key">${k}</span></div>`)
+    .map(([k, v]) =>
+      `<div class="stat"><span class="stat-value">${v}</span><span class="stat-key">${k}</span></div>`)
     .join("");
 }
+
+// ---------- žebříček a historie ----------
 
 function renderLeaderboard() {
   const counts = {};
   NAMES.forEach((n) => (counts[n] = 0));
-  allData.forEach((c) => {
+  state.data.forEach((c) => {
     counts[c.person] = (counts[c.person] || 0) + 1;
   });
 
@@ -556,7 +742,7 @@ function renderLeaderboard() {
   leaderboardEl.innerHTML = "";
   sorted.forEach(([name, count], i) => {
     const li = document.createElement("li");
-    const rank = medals[i] || `${i + 1}.`;
+    const rank = count > 0 ? medals[i] || `${i + 1}.` : "—";
     li.innerHTML =
       `<span><span class="rank">${rank}</span>${AVATARS[name] || "🐾"} ${name}</span>` +
       `<span class="score">${count}</span>`;
@@ -566,12 +752,12 @@ function renderLeaderboard() {
 
 function renderHistory() {
   historyEl.innerHTML = "";
-  if (allData.length === 0) {
-    historyEl.innerHTML = '<div class="empty">Zatím nikdo nikde. Přidej první check-in nahoře.</div>';
+  if (!state.data.length) {
+    historyEl.innerHTML = '<div class="empty">Zatím nikdo nikde.</div>';
     return;
   }
 
-  const sorted = [...allData].sort(
+  const sorted = [...state.data].sort(
     (a, b) => new Date(b.timestamp) - new Date(a.timestamp)
   );
 
@@ -618,21 +804,70 @@ function renderHistory() {
 }
 
 function renderAll() {
-  renderShopGrid();
+  renderTodayList();
   renderMap();
   renderLeaderboard();
   renderHistory();
 }
 
+// ---------- vymazání dat ----------
+
+async function resetAll() {
+  if (!confirm("Opravdu smazat všechny check-iny i fotky? Nejde to vrátit.")) return;
+  const pin = prompt("Zadej ADMIN_PIN (nastavuje se v Netlify):");
+  if (!pin) return;
+
+  try {
+    state.data = await apiPost({ action: "reset", pin });
+    clearError();
+    flash("Data smazána");
+    renderAll();
+  } catch (err) {
+    showError(err.message);
+  }
+}
+
+// ---------- start ----------
+
 async function init() {
   todayDateEl.textContent = `(${formatDate(todayStr())})`;
-  initSelects();
-  findBtn.addEventListener("click", findNearby);
+
+  renderPersonChips();
+  renderChainGrid();
+  fillCityList();
+
+  const savedPerson = localStorage.getItem("noc-nakupy-person");
+  if (savedPerson && NAMES.includes(savedPerson)) {
+    selectPerson(savedPerson);
+  }
+  const savedPlace = localStorage.getItem("noc-nakupy-place");
+  if (savedPlace) cityInput.value = savedPlace;
+
+  // Sbalený krok jde znovu rozbalit klepnutím na jeho hlavičku.
+  [stepPerson, stepPlace].forEach((step) => {
+    step.querySelector(".step-head").addEventListener("click", () => {
+      if (step.dataset.state === "done") setStep(step, "active");
+    });
+  });
+
+  gpsBtn.addEventListener("click", useGps);
+  cityBtn.addEventListener("click", useCity);
+  cityInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      useCity();
+    }
+  });
+  radiusSelect.addEventListener("change", loadNearby);
+  reloadBtn.addEventListener("click", loadNearby);
+  fallbackToggle.addEventListener("click", () => showFallback(chainGrid.hidden));
+  resetBtn.addEventListener("click", resetAll);
+
   try {
-    allData = await fetchData();
+    state.data = await fetchData();
     clearError();
   } catch (err) {
-    allData = [];
+    state.data = [];
     showError(err.message === NO_FUNCTIONS ? err.message : `Data se nenačetla — ${err.message}`);
   }
   renderAll();

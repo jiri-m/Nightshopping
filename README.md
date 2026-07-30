@@ -64,16 +64,47 @@ proměnnou `BLOBS_SITE_ID` s hodnotou *Project ID*
 
 
 
-## Obchody poblíž
+## Jak se zapisuje návštěva
 
-Tlačítko „Najít obchody poblíž" vezme polohu z telefonu a vytáhne konkrétní
-obchody z OpenStreetMap — název, ulici, vzdálenost a u většiny i otevírací
-dobu. Klepnutím na **+** se zapíše návštěva té konkrétní pobočky, takže na
-mapě sedí hvězda přesně na obchodě. Okruh hledání se dá přepnout na
-600 m / 1,2 km / 3 km.
+Jedna karta, tři kroky, které se odemykají postupně:
 
-Databáze je živá z OpenStreetMap, takže není potřeba nic udržovat.
-Když telefon polohu nedá, použije se město vybrané nahoře.
+1. **Kdo jsi** — klepneš na svoje jméno. Appka si ho pamatuje, takže příště
+   je krok rovnou hotový.
+2. **Kde jsi** — buď „Použít moji polohu" (přesné, hvězda na mapě sedí na
+   obchodě), nebo napíšeš město. Nabízí se města ze seznamu `PLACES`,
+   ale napsat jde cokoliv — zbytek se dohledá v OpenStreetMap.
+3. **Kde jsi nakupoval** — obchody v okolí se načtou samy, s ulicí,
+   vzdáleností a u většiny i otevírací dobou. Klepnutím na řádek se zapíše
+   návštěva té konkrétní pobočky. Okruh se dá přepnout na 600 m / 1,2 km / 3 km.
+
+Když obchod v seznamu není (nebo OpenStreetMap zrovna neodpovídá), rozbalí se
+pod odkazem **„Můj obchod tu není"** seznam řetězců. Návštěva se zapíše
+s polohou, ale bez konkrétní pobočky.
+
+Hotový krok se sbalí na jeden řádek a klepnutím na hlavičku se zase rozbalí.
+
+## Jak to funguje dál
+
+- **Dnes** — seznam dnešních návštěv všech. U svých máš **↺** (vzít zpět)
+  a **📷** (připojit fotku). Cizí záznamy měnit nejdou.
+- **Hvězdná mapa** — každé místo je hvězdička, větší a jasnější = víc
+  návštěv. Spojnice tvoří souhvězdí. Bez polohy se check-in počítá dál,
+  jen nemá hvězdu.
+- **Žebříček** počítá všechny check-iny za celou dobu.
+- **Historie** ukazuje všechny záznamy, nejnovější nahoře.
+
+## Mazání dat
+
+Odkaz **„Vymazat všechna data"** úplně dole smaže check-iny i fotky. Protože
+je web veřejný, jde to jen s PINem:
+
+1. Netlify → Project configuration → Environment variables → přidej
+   `ADMIN_PIN` s libovolnou hodnotou, kterou si vymyslíš
+2. Deploys → Trigger deploy → Clear cache and deploy site
+3. V appce klepni na odkaz a PIN zadej
+
+Bez nastaveného `ADMIN_PIN` server mazání odmítne, takže nikdo cizí data
+smazat nemůže.
 
 ## Když appka hlásí chybu
 
@@ -91,19 +122,8 @@ Všechno je nahoře v `app.js`:
 
 - `NAMES` — kdo se účastní
 - `AVATARS` — zvířecí ikonka ke jménu
-- `SHOPS` — řetězce
-- `PLACES` — města nabízená pro mapu
+- `SHOPS` — řetězce do záložního seznamu
+- `PLACES` — města v našeptávači
 
-Po úpravě nahraj složku znovu. Data se tím neztratí, jsou v Netlify Blobs
+Po úpravě stačí pushnout. Data se tím neztratí, jsou v Netlify Blobs
 odděleně od kódu.
-
-## Jak to funguje
-
-- Nahoře si vybereš jméno a místo (appka si obojí pamatuje)
-- **+** přidá dnešní návštěvu, klidně opakovaně; **−** vrátí poslední zpátky
-- **📷** volitelně připojí fotku k poslednímu dnešnímu check-inu
-- **Hvězdná mapa** — každé místo je hvězda, větší a jasnější = víc návštěv.
-  Poloha z GPS nebo z vybraného města; bez polohy se check-in počítá dál,
-  jen nemá hvězdu
-- **Žebříček** počítá všechny check-iny za celou dobu
-- **Historie** ukazuje všechny záznamy, nejnovější nahoře

@@ -64,7 +64,64 @@ export default async (req) => {
         return json({ error: 'Neplatný formát požadavku.' }, 400);
       }
 
-      const { person, shop, date, action: requestedAction, dataUrl, lat, lng, place, branch } = body || {};
+      const { person, shop, date, action: requestedAction, dataUrl, lat, lng, place, branch, id, pin } = body || {};
+
+      // Smazání všeho je nevratné a endpoint je veřejný, takže ho pouští
+      // jen shoda s ADMIN_PIN nastaveným v Netlify. Bez něj nejde vůbec.
+      if (requestedAction === 'reset') {
+        const expected = process.env.ADMIN_PIN;
+        if (!expected) {
+          return json({ error: 'Mazání není povolené. V Netlify nastav proměnnou ADMIN_PIN.' }, 403);
+        }
+        if (!pin || pin !== expected) {
+          return json({ error: 'Špatný PIN.' }, 403);
+        }
+        const old = (await s.get(KEY, { type: 'json' })) || [];
+        const ps = photoStore();
+        for (const c of old) {
+          if (c.hasPhoto && c.id) {
+            try {
+              await ps.delete(c.id);
+            } catch (e) {
+              // úklid fotek je best-effort
+            }
+          }
+        }
+        await s.setJSON(KEY, []);
+        return json({ action: 'reset', data: [] });
+      }
+
+      // Mazání a fotka míří na konkrétní záznam podle id, takže na ně
+      // stačí samotné id bez jména a obchodu.
+      if (requestedAction === 'remove' || (requestedAction === 'attach-photo' && id)) {
+        const data = (await s.get(KEY, { type: 'json' })) || [];
+        const idx = data.findIndex((c) => c.id === id);
+        if (idx < 0) {
+          return json({ error: 'Takový check-in už neexistuje.' }, 404);
+        }
+
+        if (requestedAction === 'remove') {
+          const entry = data[idx];
+          if (entry.hasPhoto && entry.id) {
+            try {
+              await photoStore().delete(entry.id);
+            } catch (e) {
+              // úklid fotky je best-effort
+            }
+          }
+          data.splice(idx, 1);
+        } else {
+          if (!dataUrl) {
+            return json({ error: 'Fotka nedorazila. Zkus to znovu.' }, 400);
+          }
+          await photoStore().set(id, dataUrl);
+          data[idx].hasPhoto = true;
+        }
+
+        await s.setJSON(KEY, data);
+        return json({ action: requestedAction, data });
+      }
+
       if (!person || !shop || !date) {
         return json({ error: 'Chybí jméno, obchod nebo datum.' }, 400);
       }
