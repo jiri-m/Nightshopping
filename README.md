@@ -75,11 +75,13 @@ Jedna karta, tři kroky, které se odemykají postupně:
    check-in, takže se mu počítá do žebříčku, ale v seznamu je to jedna
    položka a bere se zpět najednou.
 2. **Kde jsi** — buď „Použít moji polohu" (přesné, hvězda na mapě sedí na
-   obchodě), nebo napíšeš město. Nabízí se města ze seznamu `PLACES`,
-   ale napsat jde cokoliv — zbytek se dohledá v OpenStreetMap.
+   obchodě), nebo napíšeš město. Nabízí se města ze seznamu `PLACES`
+   (české i kanadské), napsat jde ale cokoliv — zbytek se dohledá
+   v OpenStreetMap. Na diakritice nezáleží, „Montreal" najde Montréal.
 3. **Kde jsi nakupoval** — obchody v okolí se načtou samy, s ulicí,
    vzdáleností a u většiny i otevírací dobou. Klepnutím na řádek se zapíše
-   návštěva té konkrétní pobočky. Okruh se dá přepnout na 600 m / 1,2 km / 3 km.
+   návštěva té konkrétní pobočky. Okruh se dá přepnout na 600 m / 1,2 km /
+   3 km, a když v něm nic není, appka si ho sama rozšíří až na 20 km.
 
 Když obchod v seznamu není (nebo OpenStreetMap zrovna neodpovídá), rozbalí se
 pod odkazem **„Můj obchod tu není"** seznam řetězců. Návštěva se zapíše

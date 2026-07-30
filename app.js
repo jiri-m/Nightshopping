@@ -71,7 +71,18 @@ const PLACES = [
   ["Trutnov", 50.561, 15.912],
   ["Česká Lípa", 50.686, 14.537],
   ["Přerov", 49.455, 17.451],
-  ["Třebíč", 49.215, 15.881]
+  ["Třebíč", 49.215, 15.881],
+  // Kanada. Souřadnice míří do centra, ne na těžiště celé aglomerace —
+  // kolem těžiště bývá les a nenašel by se ani rohlík.
+  ["Montréal", 45.5019, -73.5674],
+  ["Québec", 46.8131, -71.2075],
+  ["Toronto", 43.6532, -79.3832],
+  ["Ottawa", 45.4215, -75.6972],
+  ["Vancouver", 49.2827, -123.1207],
+  ["Calgary", 51.0447, -114.0719],
+  ["Edmonton", 53.5461, -113.4938],
+  ["Winnipeg", 49.8951, -97.1384],
+  ["Halifax", 44.6488, -63.5752]
 ];
 // =================================================
 
@@ -237,6 +248,11 @@ function formatDist(m) {
   return m < 1000 ? `${m} m` : `${(m / 1000).toFixed(1)} km`.replace(".", ",");
 }
 
+// „Montreal" musí najít „Montréal", „Plzen" musí najít „Plzeň".
+function foldAccents(s) {
+  return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+}
+
 function setStep(el, stateName) {
   el.dataset.state = stateName;
 }
@@ -350,22 +366,35 @@ function getGpsPosition() {
   });
 }
 
+// Nominatim řadí podle „důležitosti", takže na dotaz Quebec vrátí jako
+// první provincii, ne město. Její těžiště leží v pustině a v okolí není
+// jediný obchod. Proto se bere víc výsledků a vybírá se z nich sídlo.
+const SETTLEMENT = new Set([
+  "city", "town", "village", "municipality", "hamlet",
+  "suburb", "borough", "quarter", "neighbourhood", "city_district"
+]);
+
 async function geocodeCity(query) {
-  const local = PLACES.find(([n]) => n.toLowerCase() === query.toLowerCase());
+  const wanted = foldAccents(query);
+  const local = PLACES.find(([n]) => foldAccents(n) === wanted);
   if (local) return { lat: local[1], lng: local[2], label: local[0], precise: false };
 
   // Bez omezení na zemi — někdo může logovat i z Kanady.
-  const url = `${GEOCODE_URL}?format=jsonv2&limit=1&q=${encodeURIComponent(query)}`;
+  const url = `${GEOCODE_URL}?format=jsonv2&limit=8&q=${encodeURIComponent(query)}`;
   const res = await fetch(url, { headers: { "Accept-Language": "cs" } });
   if (!res.ok) throw new Error(`vyhledávání měst vrátilo ${res.status}`);
   const hits = await res.json();
   if (!hits.length) throw new Error("takové město jsem nenašel");
-  const hit = hits[0];
+
+  const town = hits.find((h) => SETTLEMENT.has(h.addresstype) || SETTLEMENT.has(h.type));
+  const hit = town || hits[0];
   return {
     lat: Number(hit.lat),
     lng: Number(hit.lon),
     label: hit.name || hit.display_name.split(",")[0],
-    precise: false
+    precise: false,
+    // Když se sídlo nenašlo, jde nejspíš o kraj nebo stát a je fér to říct.
+    vague: !town
   };
 }
 
@@ -421,39 +450,26 @@ function chainOf(tags) {
   return hit || tags.brand || tags.name || "Jiný obchod";
 }
 
-async function loadNearby() {
-  if (!state.location || state.loadingShops) return;
-  state.loadingShops = true;
-  reloadBtn.disabled = true;
-  nearbyList.innerHTML = "";
-  nearbyStatus.textContent = "Hledám obchody v okolí…";
+// Kanadské řetězce mají v OSM stejné značky jako české, ale přibývá
+// shop=grocery, který se v Severní Americe používá běžně.
+const SHOP_TAGS = "^(supermarket|convenience|grocery|department_store|greengrocer|variety_store)$";
 
-  const { lat, lng } = state.location;
-  const radius = Number(radiusSelect.value);
+async function overpassAround(lat, lng, radius) {
   const query =
     `[out:json][timeout:25];` +
-    `nwr(around:${radius},${lat},${lng})` +
-    `[shop~"^(supermarket|convenience|department_store|greengrocer)$"];` +
+    `nwr(around:${radius},${lat},${lng})[shop~"${SHOP_TAGS}"];` +
     `out center tags;`;
+  const res = await fetch(OVERPASS_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: "data=" + encodeURIComponent(query)
+  });
+  if (!res.ok) throw new Error(`databáze obchodů vrátila ${res.status}`);
+  return (await res.json()).elements || [];
+}
 
-  let elements;
-  try {
-    const res = await fetch(OVERPASS_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: "data=" + encodeURIComponent(query)
-    });
-    if (!res.ok) throw new Error(`databáze obchodů vrátila ${res.status}`);
-    elements = (await res.json()).elements || [];
-  } catch (err) {
-    nearbyStatus.textContent = `Obchody se nenačetly — ${err.message}.`;
-    showFallback(true);
-    state.loadingShops = false;
-    reloadBtn.disabled = false;
-    return;
-  }
-
-  const shops = elements
+function toShops(elements, lat, lng) {
+  return elements
     .map((el) => {
       const sLat = el.lat != null ? el.lat : el.center && el.center.lat;
       const sLng = el.lon != null ? el.lon : el.center && el.center.lon;
@@ -472,19 +488,60 @@ async function loadNearby() {
     .filter(Boolean)
     .sort((a, b) => a.dist - b.dist)
     .slice(0, 25);
+}
+
+async function loadNearby() {
+  if (!state.location || state.loadingShops) return;
+  state.loadingShops = true;
+  reloadBtn.disabled = true;
+  nearbyList.innerHTML = "";
+  nearbyStatus.textContent = "Hledám obchody v okolí…";
+
+  const { lat, lng } = state.location;
+  const chosen = Number(radiusSelect.value);
+  // Když ve zvoleném okruhu nic není, hledá se dál samo. Poslat člověka
+  // ručně přepínat okruh je zbytečný krok — hlavně u velkých měst, kde
+  // střed vyjde na náměstí nebo do parku.
+  const ladder = [...new Set([chosen, 3000, 8000, 20000])].filter((r) => r >= chosen);
+
+  let shops = [];
+  let usedRadius = chosen;
+  try {
+    for (const radius of ladder) {
+      if (radius !== chosen) {
+        nearbyStatus.textContent = `V okruhu ${formatDist(usedRadius)} nic, zkouším ${formatDist(radius)}…`;
+      }
+      shops = toShops(await overpassAround(lat, lng, radius), lat, lng);
+      usedRadius = radius;
+      if (shops.length) break;
+    }
+  } catch (err) {
+    nearbyStatus.textContent = `Obchody se nenačetly — ${err.message}.`;
+    showFallback(true);
+    state.loadingShops = false;
+    reloadBtn.disabled = false;
+    return;
+  }
 
   state.loadingShops = false;
   reloadBtn.disabled = false;
 
   if (!shops.length) {
-    nearbyStatus.textContent = "Tady žádný obchod není. Zkus větší okruh.";
+    nearbyStatus.textContent = state.location.vague
+      ? `„${state.location.label}" jsem našel jako oblast, ne jako město, ` +
+        `takže hledám uprostřed ničeho. Napiš konkrétní město, nebo vyber řetězec níž.`
+      : `Ani do ${formatDist(ladder[ladder.length - 1])} od místa „${state.location.label}" ` +
+        `nic není. Zkus napsat přesnější místo, nebo vyber řetězec níž.`;
     showFallback(true);
     return;
   }
 
-  nearbyStatus.textContent = state.location.precise
+  const where = state.location.precise
     ? "Klepni na obchod, ve kterém jsi byl."
     : `Obchody kolem místa ${state.location.label}. Pro přesnější výsledky povol polohu.`;
+  nearbyStatus.textContent = usedRadius === chosen
+    ? where
+    : `${where} Ve zvoleném okruhu nic nebylo, tohle je do ${formatDist(usedRadius)}.`;
   showFallback(false);
 
   shops.forEach((shop) => {
