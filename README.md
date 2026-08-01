@@ -100,7 +100,18 @@ Hotový krok se sbalí na jeden řádek a klepnutím na hlavičku se zase rozbal
   check-in odtamtud se promítne do ní, ne mimo mapu. Každá mapa má
   vlastní souhvězdí, čáry mezi kontinenty nevedou.
 - **Žebříček** počítá všechny check-iny za celou dobu.
-- **Historie** ukazuje všechny záznamy, nejnovější nahoře.
+- **Historie** ukazuje všechny záznamy, nejnovější nahoře, s datem i časem.
+
+## Čas u záznamu
+
+Ukazuje se čas, kdy se nakupovalo, ne kdy se záznam čte. Nové check-iny si
+proto vedle `timestamp` (ten je vždy v UTC) ukládají i `tzOffset`, tedy
+posun pásma toho, kdo zapisoval. Kanadský noční nákup tak zůstane noční
+i při čtení z Česka.
+
+Záznamy pořízené dřív `tzOffset` nemají a vykreslí se podle pásma čtenáře.
+Nic se kvůli tomu nepřepisuje, ta odchylka se sama vytratí s dalšími
+záznamy.
 
 ## Mazání dat
 

@@ -302,6 +302,7 @@ input[type="text"], select {
 .today-info { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .today-who { font-size: 14px; font-weight: 600; }
 .today-where { font-size: 12px; color: var(--muted); }
+.stamp { font-variant-numeric: tabular-nums; color: var(--accent); font-weight: 600; }
 
 .today-actions { display: flex; gap: 6px; flex-shrink: 0; }
 

@@ -200,6 +200,20 @@ function formatDate(dateStr) {
   return `${Number(d)}. ${Number(m)}. ${y}`;
 }
 
+// Čas nákupu, ne čas prohlížení. Nové záznamy si nesou posun pásma místa,
+// takže kanadská noční výprava zůstane noční i při čtení z Česka.
+// U starších záznamů posun chybí a použije se pásmo čtenáře.
+function formatTime(c) {
+  const d = new Date(c.timestamp);
+  if (isNaN(d.getTime())) return "";
+  const pad = (n) => String(n).padStart(2, "0");
+  if (typeof c.tzOffset === "number") {
+    const local = new Date(d.getTime() + c.tzOffset * 60000);
+    return `${pad(local.getUTCHours())}:${pad(local.getUTCMinutes())}`;
+  }
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 function project(lat, lng) {
   return {
     x: (lng - PROJ.lon0) * PROJ.k * PROJ.s,
@@ -614,7 +628,9 @@ async function checkIn({ shop, branch, lat, lng, place }) {
     persons: state.party,
     shop,
     date: todayStr(),
-    action: "add"
+    action: "add",
+    // Minuty východně od UTC, tedy pásmo toho, kdo zapisuje.
+    tzOffset: -new Date().getTimezoneOffset()
   };
   if (branch) payload.branch = branch;
   if (typeof lat === "number" && typeof lng === "number") {
@@ -727,9 +743,12 @@ function renderTodayList() {
 
     const info = document.createElement("div");
     info.className = "today-info";
+    const time = formatTime(c);
     info.innerHTML =
       `<span class="today-who">${who}</span>` +
-      `<span class="today-where">${c.branch || c.shop}</span>`;
+      `<span class="today-where">` +
+      (time ? `<span class="stamp">${time}</span> · ` : "") +
+      `${c.branch || c.shop}</span>`;
     row.appendChild(info);
 
     // Zpětvzetí a fotka jen u vlastních záznamů — cizí check-in nemá
@@ -963,9 +982,10 @@ function renderHistory() {
     const div = document.createElement("div");
     div.className = "history-item";
     const where = c.branch ? ` · ${c.branch}` : c.place ? ` · ${c.place}` : "";
+    const time = formatTime(c);
     div.innerHTML =
       `<strong>${AVATARS[c.person] || "🐾"} ${c.person}</strong> — ${c.shop} ` +
-      `<span>(${formatDate(c.date)}${where})</span>`;
+      `<span>(${formatDate(c.date)}${time ? ` ${time}` : ""}${where})</span>`;
 
     if (c.hasPhoto && c.id) {
       const photoBtn = document.createElement("button");

@@ -64,7 +64,7 @@ export default async (req) => {
         return json({ error: 'Neplatný formát požadavku.' }, 400);
       }
 
-      const { person, persons, shop, date, action: requestedAction, dataUrl, lat, lng, place, branch, id, pin } = body || {};
+      const { person, persons, shop, date, action: requestedAction, dataUrl, lat, lng, place, branch, id, pin, tzOffset } = body || {};
 
       // Smazání všeho je nevratné a endpoint je veřejný, takže ho pouští
       // jen shoda s ADMIN_PIN nastaveným v Netlify. Bez něj nejde vůbec.
@@ -160,6 +160,11 @@ export default async (req) => {
             hasPhoto: false
           };
           if (groupId) entry.groupId = groupId;
+          // Posun pásma toho, kdo zapisuje. Díky němu se čas ukáže tak,
+          // jak ho zažil nakupující, ne podle pásma čtenáře.
+          if (Number.isFinite(tzOffset) && Math.abs(tzOffset) <= 900) {
+            entry.tzOffset = tzOffset;
+          }
           if (typeof lat === 'number' && typeof lng === 'number') {
             entry.lat = lat;
             entry.lng = lng;
